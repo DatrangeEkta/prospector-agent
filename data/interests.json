@@ -1,0 +1,45 @@
+{
+  "note": "Topics, importance, skip list and radar groups are in interests.xlsx. This file only lists the arXiv areas to download.",
+  "areas": [
+    {
+      "name": "Quant",
+      "categories": [
+        "q-fin.PM",
+        "q-fin.RM",
+        "q-fin.ST",
+        "q-fin.CP",
+        "q-fin.TR",
+        "q-fin.GN"
+      ],
+      "max_results": 400
+    },
+    {
+      "name": "LLM / AI",
+      "categories": [
+        "cs.CL",
+        "cs.AI",
+        "cs.LG"
+      ],
+      "max_results": 1500,
+      "must_mention": [
+        [
+          "large language model",
+          "LLM",
+          "language model"
+        ],
+        [
+          "extraction",
+          "document",
+          "retrieval",
+          "financial",
+          "finance",
+          "hallucination",
+          "data quality",
+          "tabular",
+          "OCR",
+          "reconciliation"
+        ]
+      ]
+    }
+  ]
+}

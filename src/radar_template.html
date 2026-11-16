@@ -1,0 +1,800 @@
+<title>Prospector Radar</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an instrument panel. Hero thesis + funnel, then a radar of every matched paper beside a readout,
+   then the shortlist the team votes on, then the path from paper to business result. */
+:root {
+  --bg: #EEF2F1;
+  --surface: #FFFFFF;
+  --ink: #10201E;
+  --muted: #566866;
+  --line: #D2DCDA;
+  --grid: #C3D0CD;
+  --teal: #0C6B66;
+  --teal-soft: #DCEDEA;
+  --signal: #B86A00;
+  --signal-soft: #FBEBD3;
+  --quant: #4A55C9;
+  --quant-soft: #E3E5FA;
+  --good: #1E7A45;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0B1312; --surface: #12201E; --ink: #E4EDEB; --muted: #8DA09D; --line: #233533; --grid: #2C4340;
+  --teal: #43C2B6; --teal-soft: #173431; --signal: #F2A93B; --signal-soft: #3A2A12;
+  --quant: #929BFF; --quant-soft: #23264A; --good: #5BCB8A; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0B1312; --surface: #12201E; --ink: #E4EDEB; --muted: #8DA09D; --line: #233533; --grid: #2C4340;
+  --teal: #43C2B6; --teal-soft: #173431; --signal: #F2A93B; --signal-soft: #3A2A12;
+  --quant: #929BFF; --quant-soft: #23264A; --good: #5BCB8A; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+a { color: var(--teal); }
+a:focus-visible, button:focus-visible, circle:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+/* Hero */
+header { padding-block: 44px 28px; }
+h1 { font-family: var(--display); font-weight: 800; font-size: clamp(32px, 5.2vw, 60px); line-height: 1.02; letter-spacing: -.02em; margin: 14px 0 0; text-wrap: balance; max-width: 17ch; }
+h1 .n { color: var(--teal); }
+h1 .one { color: var(--signal); }
+.lede { color: var(--muted); max-width: 62ch; margin: 16px 0 0; font-size: 16px; }
+.funnel { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-top: 30px; }
+.step { border-top: 2px solid var(--line); padding-top: 10px; min-width: 0; }
+.step b { display: block; font-family: var(--display); font-weight: 700; font-size: clamp(22px, 3vw, 34px); line-height: 1.05; font-variant-numeric: tabular-nums; }
+.step span { color: var(--muted); font-size: 13px; display: block; margin-top: 4px; }
+.step .bar { height: 6px; border-radius: 3px; background: var(--teal); margin-top: 10px; opacity: .85; }
+.step.hot { border-top-color: var(--signal); }
+.step.hot b { color: var(--signal); }
+.step.hot .bar { background: var(--signal); }
+
+h2 { font-family: var(--display); font-weight: 700; font-size: clamp(22px, 2.6vw, 30px); letter-spacing: -.01em; margin: 0; text-wrap: balance; }
+section { padding-block: 34px; border-top: 1px solid var(--line); }
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 20px; margin-bottom: 20px; }
+.sec-head p { margin: 6px 0 0; color: var(--muted); max-width: 64ch; }
+
+/* How to use */
+.howto { margin-top: 30px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 22px; }
+.howto h2 { font-size: 20px; }
+.howto ol { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.howto li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start; }
+.howto li .n { width: 26px; height: 26px; border-radius: 50%; background: var(--teal-soft); color: var(--teal); font-family: var(--mono); font-size: 13px; display: grid; place-items: center; }
+.howto li b { font-weight: 600; }
+.howto li span.t { color: var(--muted); }
+.howto .eg { background: var(--signal-soft); border-radius: 8px; padding: 14px 16px; min-width: 0; }
+.howto .eg p { margin: 6px 0 0; font-size: 14px; }
+.howto .eg .q { font-style: italic; }
+.howto .eg button { font: inherit; font-size: 13.5px; margin-top: 10px; border: 1px solid var(--signal); background: var(--surface); color: var(--signal); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+@media (max-width: 900px) { .howto { grid-template-columns: minmax(0, 1fr); } }
+
+/* Ask the agent (web app only) */
+.ask { margin-top: 18px; background: var(--surface); border: 1px solid var(--teal); border-radius: 10px; padding: 18px 22px; }
+.ask h2 { font-size: 20px; }
+.ask > p { margin: 6px 0 10px; color: var(--muted); font-size: 14px; }
+.ask .row2 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ask input[type=text] { flex: 1 1 280px; min-width: 0; font: inherit; font-size: 15px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; }
+.ask button { font: inherit; font-size: 14px; border-radius: 999px; padding: 7px 18px; cursor: pointer; border: 1px solid var(--teal); background: var(--teal); color: var(--surface); }
+.ask button.ghost { background: var(--surface); color: var(--teal); }
+.ask button:disabled { opacity: .55; cursor: default; }
+.ask .msg { font-size: 13.5px; color: var(--muted); }
+.ask .tries { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.ask .tries button { font-size: 12.5px; padding: 3px 10px; background: var(--surface); color: var(--teal); border-color: var(--line); }
+.ask ol.steps { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 8px; }
+.ask ol.steps li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start; border-left: 2px solid var(--teal-soft); padding-left: 8px; }
+.ask ol.steps .n { width: 26px; height: 26px; border-radius: 50%; background: var(--teal-soft); color: var(--teal); font-family: var(--mono); font-size: 13px; display: grid; place-items: center; }
+.ask ol.steps .t { font-size: 13.5px; color: var(--muted); }
+.ask ol.steps .th { font-size: 14px; font-style: italic; margin-top: 2px; }
+.ask .by { font-family: var(--mono); font-size: 11.5px; border-radius: 999px; padding: 1px 7px; background: var(--signal-soft); color: var(--signal); }
+.ask .by.rule { background: var(--teal-soft); color: var(--teal); }
+.ask .outcome { margin: 14px 0 0; font-weight: 600; }
+.ask .ans { display: grid; gap: 10px; margin-top: 10px; }
+.ask .ans article { background: var(--bg); border-radius: 8px; padding: 12px 14px; min-width: 0; }
+.ask .ans h3 { font-family: var(--display); font-size: 16.5px; margin: 0; overflow-wrap: anywhere; }
+.ask .ans p { margin: 5px 0 0; font-size: 14px; }
+.ask .ans .k { font-family: var(--mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 6px; }
+
+/* Tell Prospector (web app only) */
+.tell { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 22px; }
+.tell h2 { font-size: 20px; }
+.tell p { margin: 6px 0 10px; color: var(--muted); font-size: 14px; }
+.tell textarea { width: 100%; min-height: 70px; font: inherit; font-size: 14.5px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; resize: vertical; }
+.tell .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+.tell button { font: inherit; font-size: 14px; border-radius: 999px; padding: 6px 16px; cursor: pointer; border: 1px solid var(--teal); background: var(--teal); color: var(--surface); }
+.tell button.ghost { background: var(--surface); color: var(--teal); }
+.tell button:disabled { opacity: .55; cursor: default; }
+.tell pre { white-space: pre-wrap; font-family: var(--mono); font-size: 12.5px; background: var(--bg); border-radius: 8px; padding: 10px 12px; margin: 10px 0 0; }
+.tell .msg { font-size: 13.5px; color: var(--muted); }
+.tell .ghost-btn { font-size: 14px; border-radius: 999px; padding: 6px 16px; border: 1px solid var(--teal); color: var(--teal); background: var(--surface); text-decoration: none; }
+.tell input[type=file] { font: inherit; font-size: 13px; color: var(--muted); max-width: 100%; }
+
+/* Radar */
+.radar-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+.radar-box { position: relative; min-width: 0; }
+.radar-box svg { width: 100%; height: auto; display: block; max-width: 100%; }
+.ring { fill: none; stroke: var(--grid); stroke-width: 1; }
+.spoke { stroke: var(--grid); stroke-width: 1; }
+.ring-label { fill: var(--muted); font-family: var(--mono); font-size: 11px; }
+.sector-label { fill: var(--ink); font-family: var(--body); font-weight: 600; font-size: 14px; }
+.sector-count { fill: var(--muted); font-family: var(--mono); font-size: 12px; }
+.sector { fill: var(--teal); opacity: 0; transition: opacity .2s; }
+.sector.alt { opacity: .035; }
+.sector.on { opacity: .12; }
+.dot { cursor: pointer; transition: r .15s; }
+.dot.ai { fill: var(--teal); fill-opacity: .5; }
+.dot.q { fill: var(--quant); fill-opacity: .85; }
+.dot.dim { fill-opacity: .1; }
+.pick { cursor: pointer; }
+.pick circle.core { fill: var(--signal); stroke: var(--surface); stroke-width: 2; }
+.pick text { fill: var(--surface); font-family: var(--mono); font-weight: 500; font-size: 11px; pointer-events: none; }
+.pick.sel circle.halo { fill: none; stroke: var(--signal); stroke-width: 2; }
+.sweep { transform-origin: 320px 320px; animation: sweep 14s linear infinite; }
+@keyframes sweep { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .sweep { animation: none; display: none; } .bar { transition: none !important; } }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 12.5px; line-height: 1.35; padding: 7px 9px; border-radius: 6px; max-width: 260px; z-index: 2; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.legend button { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+.legend button[aria-pressed="true"] { border-color: var(--teal); background: var(--teal-soft); }
+.legend .k { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); padding: 4px 4px; }
+.sw { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+.readout { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; min-width: 0; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
+.readout h3 { font-family: var(--display); font-weight: 700; font-size: 21px; line-height: 1.2; margin: 8px 0 10px; text-wrap: balance; }
+.readout h3 a { color: var(--ink); text-decoration: none; }
+.readout h3 a:hover { text-decoration: underline; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { font-family: var(--mono); font-size: 11.5px; border-radius: 4px; padding: 2px 7px; background: var(--bg); color: var(--muted); white-space: nowrap; }
+.chip.ai { background: var(--teal-soft); color: var(--teal); }
+.chip.q { background: var(--quant-soft); color: var(--quant); }
+.chip.eff { background: var(--signal-soft); color: var(--signal); }
+.kv { display: grid; gap: 12px; margin-top: 14px; }
+.kv div { min-width: 0; }
+.kv dt { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.kv dd { margin: 2px 0 0; }
+.abstract { color: var(--muted); font-size: 13.5px; margin-top: 12px; }
+.note { font-size: 12.5px; color: var(--muted); margin-top: 14px; }
+
+/* Shortlist */
+.areas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.area-col { min-width: 0; display: grid; gap: 12px; align-content: start; }
+.area-col h3 { display: flex; align-items: baseline; gap: 10px; font-family: var(--display); font-size: 19px; margin: 0 0 2px; }
+.area-col h3 small { font-family: var(--mono); font-size: 12px; font-weight: 400; color: var(--muted); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 4px 12px; cursor: pointer; transition: border-color .15s; }
+.card:hover, .card.sel { border-color: var(--signal); }
+.rank { width: 30px; height: 30px; border-radius: 50%; background: var(--signal); color: var(--surface); font-family: var(--mono); font-size: 13px; display: grid; place-items: center; }
+.card h4 { margin: 3px 0 6px; font-size: 15.5px; line-height: 1.3; font-weight: 600; }
+.card .use { margin: 0; color: var(--ink); font-size: 14px; }
+.card .use b { color: var(--muted); font-weight: 500; font-family: var(--mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; margin-right: 6px; }
+.card .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-top: 10px; }
+.vote { font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 999px; padding: 4px 12px 4px 9px; cursor: pointer; }
+.vote[aria-pressed="true"] { background: var(--signal-soft); border-color: var(--signal); color: var(--signal); }
+.vote:disabled { cursor: default; opacity: .6; }
+.vote .c { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.faces { display: inline-flex; }
+.faces img { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--surface); margin-left: -6px; }
+.faces img:first-child, .faces .ini:first-child { margin-left: 0; }
+.faces .ini { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--surface); margin-left: -6px; background: var(--teal-soft); color: var(--teal); font: 600 9.5px/18px var(--mono); text-align: center; display: inline-block; }
+#month-pick { font: inherit; font-size: 12px; margin-left: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 1px 4px; }
+.linkbtn { font: inherit; font-size: 13px; background: none; border: 0; color: var(--teal); cursor: pointer; padding: 4px 2px; }
+.status { font-size: 13px; color: var(--muted); margin-top: 14px; min-height: 1.4em; }
+
+/* Pipeline */
+.pipe { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; position: relative; }
+.stage { padding: 0 18px 0 0; min-width: 0; }
+.stage .dotline { display: flex; align-items: center; margin-bottom: 14px; }
+.stage .node { width: 16px; height: 16px; border-radius: 50%; border: 3px solid var(--teal); background: var(--surface); flex: none; }
+.stage.done .node { background: var(--teal); }
+.stage.now .node { border-color: var(--signal); background: var(--signal-soft); box-shadow: 0 0 0 5px var(--signal-soft); }
+.stage .line { height: 2px; background: var(--line); flex: 1; }
+.stage.done .line { background: var(--teal); }
+.stage h4 { font-family: var(--display); font-size: 18px; margin: 0; }
+.stage .when { font-family: var(--mono); font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.stage p { margin: 6px 0 0; font-size: 14px; color: var(--muted); }
+.stage p strong { color: var(--ink); font-weight: 600; }
+.kra { margin-top: 28px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+.kra .track { height: 10px; border-radius: 5px; background: var(--bg); position: relative; margin-top: 10px; overflow: hidden; }
+.kra .fill { position: absolute; inset: 0 auto 0 0; background: var(--good); width: 0; }
+.kra .ticks { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 5px; }
+.kra .big { font-family: var(--display); font-weight: 800; font-size: 40px; line-height: 1; text-align: right; }
+.kra .big small { display: block; font-family: var(--body); font-weight: 400; font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+
+footer { padding-block: 28px 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+footer .cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+footer h5 { margin: 0 0 4px; font-family: var(--mono); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink); font-weight: 500; }
+footer p { margin: 0; }
+
+@media (max-width: 900px) {
+  .radar-grid, .areas { grid-template-columns: minmax(0, 1fr); }
+  .readout { position: static; }
+  .pipe { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 26px; }
+  footer .cols { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .funnel { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 18px; }
+  .funnel .step:last-child { grid-column: 1 / -1; }
+  .sector-label, .sector-count, .ring-label { display: none; }
+  .pipe { grid-template-columns: minmax(0, 1fr); }
+  .kra { grid-template-columns: minmax(0, 1fr); }
+  .kra .big { text-align: left; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Agent 09 · Prospector Agent · <span id="month-name"></span> · papers to <span id="to-date"></span> <select id="month-pick" aria-label="Show another month" hidden></select></div>
+    <h1><span class="n" id="h-feed">1,262</span> papers read this month. Ten worth our time. <span class="one">One</span> to pilot.</h1>
+    <p class="lede">Every month the Prospector reads new arXiv research in quantitative finance and in LLMs and AI, ranks it against what our teams work on, and explains the best papers in plain words. Each quarter we pilot one technique and measure what it changes.</p>
+    <div class="funnel" id="funnel"></div>
+    <div class="howto" aria-labelledby="howto-h">
+      <div>
+        <h2 id="howto-h">How to use this page (2 minutes)</h2>
+        <ol>
+          <li><span class="n">1</span><div><b>Scroll to "This month's shortlist".</b> <span class="t">There are 10 cards, one idea each.</span></div></li>
+          <li><span class="n">2</span><div><b>Read the "Use for us" line.</b> <span class="t">Look for an idea that sounds like your own work. You don't need to read the paper.</span></div></li>
+          <li id="howto-3"><span class="n">3</span><div><b>Tap "I'd pilot this"</b> <span class="t">on any idea that would help you. The most popular idea becomes this quarter's pilot.</span></div></li>
+        </ol>
+      </div>
+      <div class="eg">
+        <div class="eyebrow">Example</div>
+        <p class="q" id="eg-q"></p>
+        <p id="eg-t"></p>
+        <button type="button" id="eg-btn"></button>
+      </div>
+    </div>
+  </header>
+
+  <section class="ask" id="ask" aria-labelledby="ask-h" hidden>
+    <h2 id="ask-h">Ask the agent</h2>
+    <p>Ask any question about your work. The agent searches our papers, the local AI checks if they really answer it, and if not it decides where to look next (older papers, or a live arXiv search with its own words) until it has enough. Every step is shown. Nothing is saved to the settings.</p>
+    <div class="row2">
+      <label for="ask-text" class="eyebrow" style="position:absolute;left:-9999px">Your question</label>
+      <input type="text" id="ask-text" maxlength="500" placeholder="e.g. How do we stop hallucinations when LLMs write client reports?">
+      <button type="button" id="ask-go">Ask</button>
+      <span class="msg" id="ask-msg" aria-live="polite"></span>
+    </div>
+    <div class="tries" id="ask-tries"></div>
+    <div id="ask-out" aria-live="polite"></div>
+  </section>
+
+  <section class="tell" id="tell" aria-labelledby="tell-h" hidden>
+    <h2 id="tell-h">Tell Prospector</h2>
+    <p>Type your interests or what you worked on today, in plain words. Example: "My interest is invoice matching. Today I got stuck on OCR breaking merged cells in fee tables." The next scan uses it.</p>
+    <label for="tell-text" class="eyebrow" style="display:block;margin-bottom:4px">Your message</label>
+    <textarea id="tell-text" maxlength="2000"></textarea>
+    <div class="btns"><button type="button" id="tell-preview">See what it understood</button><button type="button" id="tell-add" class="ghost" hidden>Add to settings</button><span class="msg" id="tell-msg" aria-live="polite"></span></div>
+    <pre id="tell-out" hidden></pre>
+    <p style="margin-top:16px">Or add many at once in Excel: download the current settings, add rows (topics, work areas, tasks, skip words), then upload it. Only new rows are added; nothing already there is removed.</p>
+    <div class="btns">
+      <a class="ghost-btn" href="/api/settings/download" download>Download current settings (Excel)</a>
+      <label for="xl-file" class="eyebrow" style="margin:0">Filled file</label>
+      <input type="file" id="xl-file" accept=".xlsx">
+      <button type="button" id="xl-up" class="ghost">Upload</button>
+      <span class="msg" id="xl-msg" aria-live="polite"></span>
+    </div>
+  </section>
+
+  <section aria-labelledby="radar-h">
+    <div class="sec-head">
+      <div>
+        <h2 id="radar-h">Research radar</h2>
+        <p>Every paper that matched our interests this month is a dot. The closer it sits to the centre, the stronger the match. Numbered dots are this month's shortlist. Select any dot to read it.</p>
+      </div>
+    </div>
+    <div class="radar-grid">
+      <div class="radar-box" id="radar-box">
+        <svg id="radar" viewBox="-110 -20 860 680" role="img" aria-label="Radar of matched papers by topic and match strength"></svg>
+        <div class="tip" id="tip" hidden></div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <aside class="readout" id="readout" aria-live="polite"></aside>
+    </div>
+  </section>
+
+  <section aria-labelledby="short-h">
+    <div class="sec-head">
+      <div>
+        <h2 id="short-h">This month's shortlist</h2>
+        <p>The top five papers in each area, ranked by code against our interest list. The notes were written by our local model from each abstract, so read the paper before picking it. Mark the ones you would pilot.</p>
+      </div>
+    </div>
+    <div class="areas" id="areas"></div>
+    <div class="status" id="vote-status"></div>
+  </section>
+
+  <section aria-labelledby="pipe-h">
+    <div class="sec-head">
+      <div>
+        <h2 id="pipe-h">From paper to business result</h2>
+        <p>Reading research is the easy part. A technique only counts once it is piloted on our own work and the effect is measured.</p>
+      </div>
+    </div>
+    <div class="pipe" id="pipe"></div>
+    <div class="kra">
+      <div>
+        <div class="eyebrow">KRA · New technique adoption, <span id="kra-year"></span></div>
+        <div class="track"><div class="fill" id="kra-fill"></div></div>
+        <div class="ticks"><span>0</span><span>Target 1–2 a year, each with a measured business result</span><span>2</span></div>
+      </div>
+      <div class="big mono" id="kra-big">0<small>adopted so far</small></div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="cols">
+      <div><h5>Sources</h5><p>arXiv, free API. Quant: q-fin portfolio, risk, statistics, computational, trading, general. LLM / AI: cs.CL, cs.AI, cs.LG, narrowed to LLM papers on our topics.</p></div>
+      <div><h5>How papers are ranked</h5><p>By code, never by the model: weighted keywords in the title and abstract plus closeness in meaning to what our teams do (a local embedding model), with newer papers scoring higher. Each area gets its own top five, so the larger AI feed cannot crowd out quant work.</p></div>
+      <div><h5>Who decides</h5><p>The local model only writes the short notes. People read the papers, vote, and choose the quarter's pilot. Papers already shown in an earlier scan are skipped.</p></div>
+    </div>
+    <p class="mono" id="run-line" style="margin-top:18px;font-size:12px"></p>
+  </footer>
+</div>
+
+<script type="application/json" id="data">__DATA__</script>
+<script>
+(function () {
+  const D = JSON.parse(document.getElementById("data").textContent);
+  const fmt = n => n.toLocaleString("en-US");
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const EFFORT = { S: "S · under a week", M: "M · 2–4 weeks", L: "L · longer" };
+  const AREAS = D.areaNames;
+  const short = D.short.map((p, i) => ({ ...p, rank: i + 1 }));
+  const shortById = Object.fromEntries(short.map(p => [p["arXiv ID"], p]));
+  let votes = {}, me = null, canVote = false, userNs = null, dbNs = null, busy = false;
+  // Opened as a file or from SharePoint/Teams: no shared vote store, so votes go to the team's form (if any)
+  // Served by the FastAPI web app: votes go to its API. Opened as a file: votes go to the team form (if any).
+  const API = window.PROSPECTOR_API || "";
+  const LOCAL = !API && !(window.claude && window.claude.use);
+  const FORM = /^https:\/\//.test(D.voteForm || "") ? D.voteForm : "";
+
+  // Hero
+  document.getElementById("month-name").textContent = /^\d{4}-\d{2}$/.test(D.month || "")
+    ? new Date(D.month + "-01T00:00:00").toLocaleDateString("en-GB", { month: "long", year: "numeric" }) + " scan" : "monthly scan";
+  document.getElementById("to-date").textContent = new Date(D.to + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  document.getElementById("h-feed").textContent = fmt(D.feed);
+  const steps = [
+    [D.feed, "papers in the feed"], [D.fresh, "new this month"], [D.matched, "match our interests"],
+    [short.length, "on the shortlist"], [1, "pilot per quarter"]
+  ];
+  const lmax = Math.log10(D.feed);
+  document.getElementById("funnel").innerHTML = steps.map(([n, l], i) =>
+    `<div class="step${i === 4 ? " hot" : ""}"><b>${fmt(n)}</b><span>${l}</span><div class="bar" style="width:${Math.max(6, Math.log10(n + 1) / lmax * 100).toFixed(1)}%"></div></div>`).join("");
+
+  // Radar
+  const C = 320, R = 250, IN = 22;
+  const smax = Math.max(...D.pts.map(p => p[1]));
+  const L = Math.log1p(smax);
+  const rad = s => IN + (1 - Math.min(s, smax) / smax) * (R - IN);   // scores are 0-100: a straight scale
+  const hash = s => { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967295; };
+  const seg = 360 / D.families.length;
+  const pos = (id, s, f) => {
+    const a = (-90 + f * seg + 4 + hash(id) * (seg - 8)) * Math.PI / 180;
+    const r = rad(s) + (hash(id + "r") - .5) * 6;
+    return [C + r * Math.cos(a), C + r * Math.sin(a)];
+  };
+  const arc = (f) => {
+    const a0 = (-90 + f * seg) * Math.PI / 180, a1 = (-90 + (f + 1) * seg) * Math.PI / 180;
+    return `M${C},${C} L${C + R * Math.cos(a0)},${C + R * Math.sin(a0)} A${R},${R} 0 0 1 ${C + R * Math.cos(a1)},${C + R * Math.sin(a1)} Z`;
+  };
+  let svg = "";
+  D.families.forEach((f, i) => { svg += `<path class="sector${i % 2 ? " alt" : ""}" data-f="${i}" d="${arc(i)}"/>`; });
+  [.25, .5, .75, 1].forEach(t => {
+    const r = IN + (1 - t) * (R - IN);
+    svg += `<circle class="ring" cx="${C}" cy="${C}" r="${(t === 1 ? IN : r).toFixed(1)}"/>`;
+  });
+  svg += `<circle class="ring" cx="${C}" cy="${C}" r="${R}"/>`;
+  [.75, .5, .25].forEach(t => {
+    const r = IN + (1 - t) * (R - IN), s = t * smax;
+    svg += `<text class="ring-label" x="${C + 4}" y="${(C - r - 4).toFixed(1)}">score ${s.toFixed(0)}</text>`;
+  });
+  D.families.forEach((f, i) => {
+    const a = (-90 + i * seg) * Math.PI / 180;
+    svg += `<line class="spoke" x1="${C}" y1="${C}" x2="${C + R * Math.cos(a)}" y2="${C + R * Math.sin(a)}"/>`;
+    const m = (-90 + (i + .5) * seg) * Math.PI / 180, lx = C + (R + 22) * Math.cos(m), ly = C + (R + 22) * Math.sin(m);
+    const anchor = Math.abs(Math.cos(m)) < .2 ? "middle" : (Math.cos(m) > 0 ? "start" : "end");
+    svg += `<text class="sector-label" x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${anchor}">${esc(f)}</text>`;
+    svg += `<text class="sector-count" x="${lx.toFixed(1)}" y="${(ly + 16).toFixed(1)}" text-anchor="${anchor}">${fmt(D.famcount[i])} papers</text>`;
+  });
+  svg += `<g class="sweep" aria-hidden="true"><path d="M${C},${C} L${C},${C - R} A${R},${R} 0 0 1 ${C + R * Math.sin(Math.PI / 9)},${C - R * Math.cos(Math.PI / 9)} Z" fill="url(#sw)"/></g>`;
+  svg = `<defs><linearGradient id="sw" x1="0" y1="0" x2="1" y2="0"><stop offset="0" style="stop-color:var(--teal);stop-opacity:0"/><stop offset="1" style="stop-color:var(--teal);stop-opacity:.16"/></linearGradient></defs>` + svg;
+  D.pts.forEach((p, i) => {
+    if (shortById[p[0]]) return;
+    const [x, y] = pos(p[0], p[1], p[3]);
+    const q = D.areaNames[p[2]] === "Quant";
+    svg += `<circle class="dot ${q ? "q" : "ai"}" data-i="${i}" data-f="${p[3]}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${q ? 3.6 : 2.6}"/>`;
+  });
+  const famOf = Object.fromEntries(D.pts.map(p => [p[0], p[3]]));
+  short.forEach(p => {
+    const [x, y] = pos(p["arXiv ID"], p.Score, famOf[p["arXiv ID"]] ?? 0);
+    svg += `<g class="pick" data-id="${p["arXiv ID"]}" data-f="${famOf[p["arXiv ID"]] ?? 0}" tabindex="0" role="button" aria-label="${esc(p.rank + ". " + p.Title)}"><circle class="halo" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="14"/><circle class="core" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="9.5"/><text x="${x.toFixed(1)}" y="${(y + 3.8).toFixed(1)}" text-anchor="middle">${p.rank}</text></g>`;
+  });
+  const svgEl = document.getElementById("radar");
+  svgEl.innerHTML = svg;
+
+  // Legend: topic filters
+  let famOn = null;
+  const legend = document.getElementById("legend");
+  legend.innerHTML = D.families.map((f, i) => `<button type="button" data-f="${i}" aria-pressed="false">${esc(f)} <span class="mono">${fmt(D.famcount[i])}</span></button>`).join("") +
+    `<span class="k"><i class="sw" style="background:var(--teal)"></i>LLM / AI</span><span class="k"><i class="sw" style="background:var(--quant)"></i>Quant</span><span class="k"><i class="sw" style="background:var(--signal)"></i>Shortlist</span>`;
+  legend.addEventListener("click", e => {
+    const b = e.target.closest("button[data-f]"); if (!b) return;
+    const f = +b.dataset.f; famOn = famOn === f ? null : f;
+    legend.querySelectorAll("button[data-f]").forEach(x => x.setAttribute("aria-pressed", String(+x.dataset.f === famOn)));
+    svgEl.querySelectorAll(".sector").forEach(s => s.classList.toggle("on", +s.dataset.f === famOn));
+    svgEl.querySelectorAll(".dot").forEach(d => d.classList.toggle("dim", famOn !== null && +d.dataset.f !== famOn));
+  });
+
+  // Tooltip
+  const tip = document.getElementById("tip"), box = document.getElementById("radar-box");
+  const showTip = (el, text) => {
+    const b = box.getBoundingClientRect(), r = el.getBoundingClientRect();
+    tip.textContent = text; tip.hidden = false;
+    const w = tip.offsetWidth;
+    tip.style.left = Math.min(Math.max(0, r.left - b.left + r.width / 2 - w / 2), b.width - w) + "px";
+    tip.style.top = (r.top - b.top - tip.offsetHeight - 8) + "px";
+  };
+  svgEl.addEventListener("pointerover", e => {
+    const d = e.target.closest(".dot"), k = e.target.closest(".pick");
+    if (d) showTip(d, D.pts[+d.dataset.i][4]);
+    else if (k) showTip(k, shortById[k.dataset.id].Title);
+  });
+  svgEl.addEventListener("pointerout", () => { tip.hidden = true; });
+
+  // Readout
+  let selected = short.find(p => p.Area === "LLM / AI")?.["arXiv ID"] || short[0]["arXiv ID"];
+  const readout = document.getElementById("readout");
+  function renderReadout() {
+    const p = shortById[selected];
+    if (p) {
+      const area = p.Area === "Quant" ? "q" : "ai";
+      readout.innerHTML = `
+        <div class="meta"><span class="rank" aria-hidden="true">${p.rank}</span><span class="chip ${area}">${esc(p.Area)}</span><span class="chip eff">Effort ${esc(EFFORT[p.Effort] || "not rated")}</span><span class="chip">score ${p.Score}</span></div>
+        <h3><a href="${esc(p.Link)}" target="_blank" rel="noopener">${esc(p.Title)}</a></h3>
+        <div class="meta"><span class="chip">${esc(p["arXiv ID"])}</span><span class="chip">${esc(p.Published)}</span></div>
+        <dl class="kv">
+          <div><dt>What it is</dt><dd>${esc(p["What it is"] || "No note written.")}</dd></div>
+          <div><dt>Use for us</dt><dd>${esc(p["Use for us"] || "No note written.")}</dd></div>
+          <div><dt>Data needed</dt><dd>${esc(p["Data needed"] || "Not stated.")}</dd></div>
+          <div><dt>Matched our interests on</dt><dd class="mono" style="font-size:13px">${esc(p.Matched || "no keyword: found by meaning")}</dd></div>
+          ${p["Closest work"] ? `<div><dt>Closest to our work</dt><dd>${esc(p["Closest work"])} <span class="chip">meaning ${esc(p.Meaning)}/100</span></dd></div>` : ""}
+        </dl>
+        <div class="row" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px">${voteButton(p["arXiv ID"])}<a href="${esc(p.Link)}" target="_blank" rel="noopener">Read the paper on arXiv</a></div>
+        <p class="note">Notes written by our local model from the abstract only.</p>`;
+    } else {
+      const q = D.pts.find(x => x[0] === selected);
+      readout.innerHTML = `
+        <div class="meta"><span class="chip ${D.areaNames[q[2]] === "Quant" ? "q" : "ai"}">${esc(D.areaNames[q[2]])}</span><span class="chip">${esc(D.families[q[3]])}</span><span class="chip">score ${q[1]}</span></div>
+        <h3><a href="https://arxiv.org/abs/${esc(q[0])}" target="_blank" rel="noopener">${esc(q[4])}</a></h3>
+        <div class="meta"><span class="chip">${esc(q[0])}</span><span class="chip">${esc(q[5])}</span></div>
+        <dl class="kv"><div><dt>Matched our interests on</dt><dd class="mono" style="font-size:13px">${esc(q[6])}</dd></div></dl>
+        <p class="note">Outside the top five for its area, so no note was written. It stays in the scan's full list for anyone exploring this topic.</p>
+        <p style="margin-top:12px"><a href="https://arxiv.org/abs/${esc(q[0])}" target="_blank" rel="noopener">Read the paper on arXiv</a></p>`;
+    }
+    svgEl.querySelectorAll(".pick").forEach(g => g.classList.toggle("sel", g.dataset.id === selected));
+    document.querySelectorAll(".card").forEach(c => c.classList.toggle("sel", c.dataset.id === selected));
+    paintFaces();
+  }
+  function select(id) { selected = id; renderReadout(); }
+  svgEl.addEventListener("click", e => {
+    const d = e.target.closest(".dot"), k = e.target.closest(".pick");
+    if (k) select(k.dataset.id); else if (d) select(D.pts[+d.dataset.i][0]);
+  });
+  svgEl.addEventListener("keydown", e => {
+    const k = e.target.closest(".pick");
+    if (k && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); select(k.dataset.id); }
+  });
+
+  // Shortlist cards
+  const areasEl = document.getElementById("areas");
+  areasEl.innerHTML = AREAS.map(a => {
+    const list = short.filter(p => p.Area === a);
+    const [n, m] = D.areas[a] || [0, list.length];
+    return `<div class="area-col"><h3>${esc(a)} <small>${fmt(n)} papers · ${fmt(m)} new matches</small></h3>` + list.map(p => `
+      <article class="card" data-id="${esc(p["arXiv ID"])}">
+        <span class="rank">${p.rank}</span>
+        <div style="min-width:0">
+          <div class="meta"><span class="chip eff">Effort ${esc(p.Effort || "–")}</span><span class="chip">score ${p.Score}</span><span class="chip">${esc(p["arXiv ID"])}</span></div>
+          <h4>${esc(p.Title)}</h4>
+          <p class="use"><b>Use for us</b>${esc(p["Use for us"] || "No note written.")}</p>
+          <div class="row">${voteButton(p["arXiv ID"])}<a href="${esc(p.Link)}" target="_blank" rel="noopener" class="linkbtn">Read paper</a></div>
+        </div>
+      </article>`).join("") + `</div>`;
+  }).join("");
+  areasEl.addEventListener("click", e => {
+    if (e.target.closest("a, button")) return;
+    const c = e.target.closest(".card"); if (!c) return;
+    select(c.dataset.id);
+    if (window.matchMedia("(max-width: 900px)").matches) document.getElementById("readout").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  // Pipeline
+  function renderPipe() {
+    const fav = favourite();
+    const favText = LOCAL ? (FORM ? `Vote for the idea you would pilot with the team form.` : `Tell the team which idea you would pilot.`) : fav ? `Team favourite so far: <strong>${esc(shortById[fav.id].Title)}</strong> (${fav.n} ${fav.n === 1 ? "vote" : "votes"}).` : `No votes yet. Mark the papers you would pilot above.`;
+    const stages = [
+      ["done", "Monthly", "Scan", `<strong>${fmt(D.feed)}</strong> papers read, <strong>${short.length}</strong> shortlisted with plain-language notes.`],
+      D.pilot
+        ? ["done", `${D.quarter} · picked`, "Pick", `<strong>${esc(D.pilot.title)}</strong>${D.pilot.owner ? `, owner ${esc(D.pilot.owner)}` : ""}.${D.pilot.plan ? ` Plan: ${esc(D.pilot.plan)}.` : ""}`]
+        : ["now", `${D.quarter} · open`, "Pick", `One technique for this quarter. ${favText}`],
+      [D.pilot && !D.pilot.outcome ? "now" : (D.pilot ? "done" : ""), "Through the quarter", "Pilot", D.pilot && !D.pilot.outcome ? `In progress on our own data and work.` : `Try it on our own data and work, with an owner and a plan.`],
+      [D.pilot && D.pilot.outcome ? "done" : "", "End of quarter", "Adopt or drop", D.pilot && D.pilot.outcome ? `<strong>${esc(D.pilot.outcome)}</strong>${D.pilot.metric ? `: ${esc(D.pilot.metric)}` : ""}${D.pilot.result ? `. ${esc(D.pilot.result)}` : ""}` : `Adopted only with a written business result and a measured metric, such as review time 45 → 15 min.`]
+    ];
+    document.getElementById("pipe").innerHTML = stages.map(([s, w, h, p], i) =>
+      `<div class="stage ${s}"><div class="dotline"><span class="node"></span>${i < 3 ? '<span class="line"></span>' : ""}</div><div class="when">${w}</div><h4>${h}</h4><p>${p}</p></div>`).join("");
+  }
+
+  // Votes (shared, live)
+  const statusEl = document.getElementById("vote-status");
+  function tally() {
+    const t = {};
+    for (const [uid, ids] of Object.entries(votes)) for (const id of ids) (t[id] = t[id] || []).push(uid);
+    return t;
+  }
+  function favourite() {
+    const t = tally(); let best = null;
+    for (const [id, u] of Object.entries(t)) if (shortById[id] && (!best || u.length > best.n)) best = { id, n: u.length };
+    return best;
+  }
+  function voteButton(id) {
+    if (LOCAL) return FORM ? `<a class="vote" href="${esc(FORM)}" target="_blank" rel="noopener">Vote for #${shortById[id] ? shortById[id].rank : ""}</a>` : "";
+    const voters = tally()[id] || [];
+    const mine = me && voters.includes(me);
+    return `<span style="display:inline-flex;align-items:center;gap:8px"><button type="button" class="vote" data-vote="${esc(id)}" aria-pressed="${!!mine}" ${canVote ? "" : "disabled"}>${mine ? "✓ I'd pilot this" : "I'd pilot this"} <span class="c">${voters.length}</span></button><span class="faces" data-faces="${esc(id)}"></span></span>`;
+  }
+  function refreshVotes() {
+    document.querySelectorAll("[data-vote]").forEach(b => {
+      const wrap = b.parentElement; const tmp = document.createElement("span");
+      tmp.innerHTML = voteButton(b.dataset.vote); wrap.replaceWith(tmp.firstElementChild);
+    });
+    renderPipe(); paintFaces();
+  }
+  async function paintFaces() {
+    if (API) {   // web app: voters are names, shown as initials
+      const t = tally();
+      document.querySelectorAll("[data-faces]").forEach(el => {
+        el.textContent = "";
+        (t[el.dataset.faces] || []).slice(0, 5).forEach(name => {
+          const i = document.createElement("span");
+          i.className = "ini"; i.title = name;
+          i.textContent = name.split(/\s+/).map(w => w[0] || "").join("").slice(0, 2).toUpperCase();
+          el.appendChild(i);
+        });
+      });
+      return;
+    }
+    if (!userNs) return;
+    const t = tally(); const ids = [...new Set(Object.values(t).flat())];
+    if (!ids.length) return;
+    const ps = await userNs.profiles(ids);
+    document.querySelectorAll("[data-faces]").forEach(el => {
+      el.textContent = "";
+      (t[el.dataset.faces] || []).slice(0, 5).forEach(u => {
+        const img = document.createElement("img");
+        img.src = ps[u].avatarUrl; img.alt = ""; img.title = ps[u].name || "Someone";
+        el.appendChild(img);
+      });
+    });
+  }
+  document.addEventListener("click", async e => {
+    const b = e.target.closest("[data-vote]"); if (!b || !canVote || busy) return;
+    if (API && !me) {
+      const name = (window.prompt("Your name (shown next to your vote):") || "").trim().slice(0, 60);
+      if (!name) return;
+      me = name;
+      try { localStorage.setItem("prospector-voter", name); } catch (_) {}
+    }
+    const id = b.dataset.vote;
+    const mine = new Set(votes[me] || []);
+    mine.has(id) ? mine.delete(id) : mine.add(id);
+    busy = true;
+    votes = { ...votes, [me]: [...mine] }; refreshVotes();
+    try {
+      if (API) {
+        const r = await fetch(`${API}/votes`, { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ month: D.month, voter: me, papers: [...mine] }) });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+        votes = (await r.json()).votes; refreshVotes();
+      } else {
+        await dbNs.doc("votes/" + me).set({ papers: [...mine], updated: new Date().toISOString() });
+      }
+      statusEl.textContent = mine.has(id) ? "Vote saved. Everyone with this page sees it." : "Vote removed.";
+    } catch (err) {
+      if (err && err.code === "invalid_argument") { canVote = false; statusEl.textContent = "You can see the team's votes, but your access to this page is view-only."; }
+      else statusEl.textContent = "Your vote could not be saved. Check your connection and try again.";
+    } finally { busy = false; }
+  });
+
+  // Example: the strongest shortlisted paper that has a "Use for us" note, changes every month
+  const egP = [...short].filter(p => p["Use for us"]).sort((x, y) => y.Score - x.Score)[0] || short[0];
+  document.getElementById("eg-q").textContent = `Card ${egP.rank} says: "${egP["Use for us"] || egP.Title}"`;
+  document.getElementById("eg-t").textContent = `If that sounds like your work, card ${egP.rank} is the one to back.`;
+  document.getElementById("eg-btn").textContent = `Show me card ${egP.rank}`;
+  document.getElementById("eg-btn").addEventListener("click", () => {
+    const id = egP["arXiv ID"];
+    select(id);
+    const card = document.querySelector('.card[data-id="' + id + '"]');
+    if (card) card.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+  });
+
+  renderPipe();
+  renderReadout();
+  if (D.run) {
+    const r = D.run, papers = Object.entries(r.papers || {}).map(([k, v]) => `${k} ${fmt(v)}`).join(", ");
+    document.getElementById("run-line").textContent = `Last run ${r.when} · ${r.seconds} s · papers: ${papers} · AI notes ${r.notes} · meaning ${r.meaning}`
+      + (r.warnings && r.warnings.length ? ` · ${r.warnings.length} warning${r.warnings.length > 1 ? "s" : ""}: ${r.warnings.join(" ")}` : " · no warnings");
+  }
+  const kraN = D.adopted || 0;
+  document.getElementById("kra-year").textContent = D.year;
+  document.getElementById("kra-big").firstChild.textContent = String(kraN);
+  document.getElementById("kra-fill").style.width = (Math.min(kraN, 2) / 2 * 100) + "%";
+
+  (async () => {
+    if (API) {
+      // Ask the agent: one question -> the agent searches, checks with the local AI and decides its next step
+      const askS = document.getElementById("ask"), askT = document.getElementById("ask-text");
+      const askGo = document.getElementById("ask-go"), askM = document.getElementById("ask-msg"), askO = document.getElementById("ask-out");
+      askS.hidden = false;
+      const TOOLNAME = { search_recent: "Searched this month's papers", search_stored: "Searched all stored papers (older months)", search_arxiv: "Searched arXiv live" };
+      ["How do we stop hallucinations in client reports?", "AI techniques for ESG reports", "Extract numbers from annual reports for credit analysis"].forEach(t => {
+        const b = document.createElement("button"); b.type = "button"; b.textContent = t;
+        b.addEventListener("click", () => { askT.value = t; askGo.click(); });
+        document.getElementById("ask-tries").appendChild(b);
+      });
+      const askRun = async () => {
+        const q = askT.value.trim();
+        if (q.length < 3) { askM.textContent = "Type a question first."; return; }
+        askGo.disabled = true; askO.innerHTML = "";
+        const t0 = Date.now(), tick = setInterval(() => { askM.textContent = `The agent is working… ${Math.round((Date.now() - t0) / 1000)} s`; }, 500);
+        try {
+          const r = await fetch(`${API}/ask`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: q }) });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.detail || r.status);
+          const steps = d.steps.map(s => `<li><span class="n">${s.n}</span><div>
+              <b>${esc(TOOLNAME[s.tool] || s.tool)}</b>${s.words ? ` for <span class="mono">"${esc(s.words)}"</span>` : ""}
+              <div class="t">Looked at ${fmt(s.looked_at)} papers, checked the closest ${s.checked}: <b>${s.relevant.length} useful</b> <span class="by ${s.by === "AI" ? "" : "rule"}">checked by ${esc(s.by)}</span></div>
+              ${s.thought ? `<div class="th">AI: "${esc(s.thought)}"</div>` : ""}
+              ${s.note ? `<div class="t">${esc(s.note)}</div>` : ""}
+              <div class="t">Next: ${esc(String(s.next || "stop").replace(/_/g, " "))} <span class="by ${s.next_by === "AI" ? "" : "rule"}">decided by ${esc(s.next_by || "rule")}</span></div>
+            </div></li>`).join("");
+          const papers = d.papers.map((p, i) => `<article><h3>${i + 1}. ${esc(p.title)}</h3>
+              <p class="t mono" style="color:var(--muted);font-size:12.5px">${esc(p.id)} · ${esc(p.published)} · closeness ${Number(p.similarity).toFixed(2)}${p.effort ? ` · effort ${esc(p.effort)}` : ""}</p>
+              ${p.why ? `<p><span class="k">Why it fits</span>${esc(p.why)}</p>` : ""}
+              ${p.what ? `<p><span class="k">What it is</span>${esc(p.what)}</p>` : ""}
+              ${p.use_for_us ? `<p><span class="k">Use for us</span>${esc(p.use_for_us)}</p>` : ""}
+              <p><a href="${esc(p.link)}" target="_blank" rel="noopener">Read the paper on arXiv</a></p></article>`).join("");
+          askO.innerHTML = `<ol class="steps">${steps}</ol><p class="outcome">${esc(d.outcome)}</p><div class="ans">${papers}</div>
+            <div class="row2" style="margin-top:12px"><button type="button" class="ghost" id="ask-keep">Follow this topic every month</button></div>`;
+          document.getElementById("ask-keep").addEventListener("click", () => {
+            const tt = document.getElementById("tell-text"); tt.value = `My interest is: ${q}`;
+            document.getElementById("tell").scrollIntoView({ behavior: "smooth" }); tt.focus();
+          });
+          askM.textContent = `Done in ${d.seconds} s · AI: ${d.ai}`;
+        } catch (e) { askM.textContent = "The agent could not answer: " + e.message; }
+        finally { clearInterval(tick); askGo.disabled = false; }
+      };
+      askGo.addEventListener("click", askRun);
+      askT.addEventListener("keydown", e => { if (e.key === "Enter") askRun(); });
+
+      // Tell Prospector: preview what the local AI understood, then add on a second click
+      const tell = document.getElementById("tell"), txt = document.getElementById("tell-text");
+      const pv = document.getElementById("tell-preview"), addB = document.getElementById("tell-add");
+      const out = document.getElementById("tell-out"), msg = document.getElementById("tell-msg");
+      let pending = null;
+      tell.hidden = false;
+      const waitAndReload = (el) => {   // reload the page when the background search has finished
+        const t = setInterval(async () => {
+          try {
+            const s = await (await fetch(`${API}/run`)).json();
+            if (s.state !== "running") {
+              clearInterval(t);
+              if (s.ok) { el.textContent = "Done. Loading the updated page…"; setTimeout(() => location.reload(), 800); }
+              else el.textContent = "The search did not finish. The page stays as it was; try again later.";
+            }
+          } catch (_) {}
+        }, 5000);
+      };
+      const xf = document.getElementById("xl-file"), xu = document.getElementById("xl-up"), xm = document.getElementById("xl-msg");
+      xu.addEventListener("click", async () => {
+        const f = xf.files && xf.files[0];
+        if (!f) { xm.textContent = "Choose the filled Excel file first."; return; }
+        xu.disabled = true; xm.textContent = "Checking the file…";
+        try {
+          const r = await fetch(`${API}/settings/upload`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: f });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.detail || r.status);
+          const parts = Object.entries(d.new).filter(([, v]) => v).map(([k, v]) => `${v} ${k}`).join(", ");
+          if (!d.added) { xm.textContent = "No new rows in the file, so the page stays as it is."; return; }
+          if (d.scan_busy) { xm.textContent = `Added ${parts}. A search is already running; the next one uses them.`; return; }
+          xm.textContent = `Added ${parts}. Searching for related papers (about a minute)…`;
+          waitAndReload(xm);
+        } catch (e) { xm.textContent = "Not added: " + e.message; }
+        finally { xu.disabled = false; xf.value = ""; }
+      });
+      pv.addEventListener("click", async () => {
+        if (txt.value.trim().length < 3) { msg.textContent = "Type a sentence first."; return; }
+        pv.disabled = true; addB.hidden = true; out.hidden = true; msg.textContent = "Reading your message…";
+        try {
+          const r = await fetch(`${API}/add/preview`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: txt.value }) });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.detail || r.status);
+          pending = d.rows; out.textContent = d.summary; out.hidden = false;
+          const empty = !Object.values(d.rows).some(v => v.length);
+          addB.hidden = empty;
+          msg.textContent = empty ? "Nothing to add from that message." : (d.ai ? "Check it, then add." : "The local AI is off, so this is kept as today's task.");
+        } catch (e) { msg.textContent = "Could not read the message: " + e.message; }
+        finally { pv.disabled = false; }
+      });
+      addB.addEventListener("click", async () => {
+        if (!pending) return;
+        addB.disabled = true; msg.textContent = "Adding…";
+        try {
+          const r = await fetch(`${API}/add`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: pending }) });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.detail || r.status);
+          const extra = d.already_there.length ? `; already there: ${d.already_there.join(", ")}` : "";
+          addB.hidden = true; pending = null; txt.value = "";
+          if (!d.added) { msg.textContent = `Nothing new${extra}, so the page stays as it is.`; return; }
+          if (d.scan_busy) { msg.textContent = `Added ${d.added} row(s)${extra}. A search is already running; the next one uses them.`; return; }
+          msg.textContent = `Added ${d.added} row(s)${extra}. Searching for related papers (about a minute)…`;
+          waitAndReload(msg);
+        } catch (e) { msg.textContent = "Not added: " + e.message; }
+        finally { addB.disabled = false; }
+      });
+      canVote = true;
+      try { me = localStorage.getItem("prospector-voter"); } catch (_) {}
+      const load = async () => {
+        try {
+          const r = await fetch(`${API}/votes?month=${encodeURIComponent(D.month)}`);
+          votes = (await r.json()).votes || {};
+          const n = Object.keys(votes).filter(k => votes[k].some(id => shortById[id])).length;
+          statusEl.textContent = n ? `${n} ${n === 1 ? "person has" : "people have"} voted. Votes update every 30 seconds.`
+                                   : "No votes yet. Tap \"I'd pilot this\" on the ideas you would try.";
+          refreshVotes();
+        } catch (_) { statusEl.textContent = "Votes can't be loaded right now."; }
+      };
+      await load();
+      setInterval(load, 30000);
+      try {
+        const months = (await (await fetch(`${API}/months`)).json()).months || [];
+        const pick = document.getElementById("month-pick");
+        if (months.length > 1) {
+          pick.innerHTML = months.map(m => `<option value="${esc(m)}"${m === D.month ? " selected" : ""}>${esc(m)}</option>`).join("");
+          pick.hidden = false;
+          pick.addEventListener("change", () => { location.href = `/month/${encodeURIComponent(pick.value)}`; });
+        }
+      } catch (_) {}
+      return;
+    }
+    if (LOCAL) {
+      statusEl.innerHTML = FORM ? `Votes are collected in the <a href="${esc(FORM)}" target="_blank" rel="noopener">team form</a>. Tap "Vote" on the ideas you would pilot.` : "";
+      const step = document.getElementById("howto-3");
+      if (step) step.innerHTML = FORM
+        ? `<span class="n">3</span><div><b>Tap "Vote"</b> <span class="t">on any idea that would help you. It opens the team form; the most popular idea becomes this quarter's pilot.</span></div>`
+        : `<span class="n">3</span><div><b>Tell the team</b> <span class="t">which card numbers would help your work. The most popular idea becomes this quarter's pilot.</span></div>`;
+      return;
+    }
+    statusEl.textContent = "Loading team votes…";
+    const [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
+    userNs = user; dbNs = db;
+    me = user ? await user.id() : null;
+    if (!db) { statusEl.textContent = "Sign in to claude.ai to see and add team votes."; return; }
+    const w = user ? await user.can("data.write") : null;
+    canVote = !!me && w !== false;
+    const timer = setTimeout(() => { statusEl.textContent = "Team votes can't be reached right now. They will appear when the connection returns."; }, 10000);
+    db.collection("votes").onSnapshot(snap => {
+      votes = {};
+      snap.docs.forEach(d => { const v = d.data(); if (v && Array.isArray(v.papers)) votes[d.id] = v.papers.filter(x => typeof x === "string"); });
+      if (!snap.metadata.fromCache) clearTimeout(timer);
+      const n = Object.keys(votes).filter(k => votes[k].some(id => shortById[id])).length;
+      statusEl.textContent = (n ? `${n} ${n === 1 ? "person has" : "people have"} voted.` : "No votes yet. Be the first to mark a paper.") + (canVote ? "" : " Your access is view-only.");
+      refreshVotes();
+    }, () => { clearTimeout(timer); statusEl.textContent = "Team votes are unavailable on this view."; });
+  })();
+})();
+</script>
