@@ -12,7 +12,8 @@ is never the one that judges it.
 Any OpenAI-compatible chat endpoint works (local Ollama, vLLM, LM Studio, company gateway).
 Configure with environment variables (defaults = local Ollama on a 24 GB Mac):
     CODER_URL / CODER_MODEL / CODER_API_KEY   default qwen3.5:9b
-    JUDGE_URL / JUDGE_MODEL / JUDGE_API_KEY   default gemma4:e4b
+    JUDGE_URL / JUDGE_MODEL / JUDGE_API_KEY   default qwen3.5:9b (Prospector: checks claims; a different model
+                                              from the writer, so the one that writes is not the one that checks)
     NARRATOR_URL / NARRATOR_MODEL / NARRATOR_API_KEY   default qwen3.5:9b
     WRITER_URL / WRITER_MODEL / WRITER_API_KEY         default gemma4:e4b (V4-Flash on the company server)
     EMBED_URL / EMBED_MODEL                            default nomic-embed-text
@@ -31,7 +32,7 @@ ROLES = {
               "model": os.environ.get("CODER_MODEL", "qwen3.5:9b"),
               "key": os.environ.get("CODER_API_KEY", "")},
     "judge": {"url": os.environ.get("JUDGE_URL", OLLAMA),
-              "model": os.environ.get("JUDGE_MODEL", "gemma4:e4b"),
+              "model": os.environ.get("JUDGE_MODEL", "qwen3.5:9b"),
               "key": os.environ.get("JUDGE_API_KEY", "")},
     "narrator": {"url": os.environ.get("NARRATOR_URL", OLLAMA),
                  "model": os.environ.get("NARRATOR_MODEL", "qwen3.5:9b"),

@@ -27,11 +27,13 @@ embed the corrected question (nomic-embed-text)
 AI writes "what it is / use for us / effort" for the best 3
    │
    ▼
-CLAIM CHECK  judge role reads each paper's abstract: are "why / what / use for us" supported? (yes/partly/no)
+CLAIM CHECK  judge role, for the 5 best papers: are "why / what / use for us" supported by the abstract?
+             and does the paper's MAIN topic answer step 0's reading? (each yes/partly/no)
              + code: numbers in the claims that are not in the abstract
    │
    ▼
-CONFIDENCE (code) = 40% closeness by meaning + 60% claim check; below PROSPECTOR_LOW_CONFIDENCE = low (light red)
+CONFIDENCE (code) = 30% closeness + 30% supported + 40% answers; "no" = always Low (light red), "partly" <= Medium;
+             the 3 most confident are shown
    │
    ▼
 papers sorted by confidence  →  saved to data/users.json (weekly summary)
@@ -74,6 +76,7 @@ arXiv API (Quant: q-fin ~180 / LLM-AI: cs.CL, cs.AI, cs.LG ~1,100)
 | Role | Default (local) | Company target | Set with |
 |---|---|---|---|
 | Writer: check, decide, explain | `gemma4:e4b` | M006 V4-Flash | `WRITER_MODEL`, `WRITER_URL`, `WRITER_API_KEY` |
+| Judge: claim check, answers-the-question check | `qwen3.5:9b` | — | `JUDGE_MODEL`, `JUDGE_URL`, `JUDGE_API_KEY` |
 | Embeddings | `nomic-embed-text` | — | `EMBED_MODEL`, `EMBED_URL` |
 
 Local Ollama is called through its native API with thinking off and a 16k context.

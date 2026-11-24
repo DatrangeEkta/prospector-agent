@@ -316,7 +316,7 @@ footer p { margin: 0; }
 
   <section class="ask" id="ask" aria-labelledby="ask-h" hidden>
     <h2 id="ask-h">Ask the agent</h2>
-    <p>Ask any question about your work. The agent searches our papers, the local AI checks if they really answer it, and if not it decides where to look next (older papers, or a live arXiv search with its own words) until it has enough. Every step appears live as the agent takes it. It first checks your question, and at the end it checks every claim against the paper's own abstract and gives a confidence. Nothing is saved to the settings.</p>
+    <p>Ask any question about your work. The agent searches our papers, the local AI checks if they really answer it, and if not it decides where to look next (older papers, or a live arXiv search with its own words) until it has enough. Every step appears live as the agent takes it. It first checks your question, and at the end it checks every claim against the paper's own abstract and whether the paper really answers your question, and gives a confidence. Nothing is saved to the settings.</p>
     <div class="row2">
       <label for="ask-text" class="eyebrow" style="position:absolute;left:-9999px">Your question</label>
       <input type="text" id="ask-text" maxlength="500" placeholder="e.g. How do we stop hallucinations when LLMs write client reports?">
@@ -716,6 +716,7 @@ footer p { margin: 0; }
       const QS = new URLSearchParams(location.search);   // ?user=Name prefills the name, ?ask=... runs a question
       try { askU.value = QS.get("user") || localStorage.getItem("prospector-voter") || ""; } catch (_) { askU.value = QS.get("user") || ""; }
       const ISSUE = { typo: "Spelling problem", vague: "Too vague", off_topic: "Probably outside research papers" };
+      const ANSWERS = { yes: "answers your question", partly: "only partly answers your question", no: "does not answer your question" };
       const SUPPORTED = { yes: "supported by the abstract", partly: "partly supported by the abstract", no: "not supported by the abstract", "": "not checked" };
       const stepHtml = s => `<li class="live"><span class="n">${s.n}</span><div>
           <b>${esc(TOOLNAME[s.tool] || s.tool)}</b>${s.words ? ` for <span class="mono">"${esc(s.words)}"</span>` : ""}
@@ -723,6 +724,7 @@ footer p { margin: 0; }
           ${s.thought ? `<div class="th">AI: "${esc(s.thought)}"</div>` : ""}
           ${s.note ? `<div class="t">${esc(s.note)}</div>` : ""}
           <div class="t">Next: ${esc(String(s.next || "stop").replace(/_/g, " "))} <span class="by ${s.next_by === "AI" ? "" : "rule"}">decided by ${esc(s.next_by || "rule")}</span></div>
+          ${s.ai_wanted ? `<div class="t">The AI wanted: ${esc(String(s.ai_wanted).replace(/_/g, " "))}. A rule decided instead.</div>` : ""}
         </div></li>`;
       const checkHtml = c => `<li class="live s0"><span class="n">0</span><div><b>Question check</b> <span class="by ${c.by === "AI" ? "" : "rule"}">${c.by === "AI" ? "checked by AI" : "checked by code"}</span>
           ${c.reading ? `<div class="th">I read this as: "${esc(c.reading)}"</div>` : ""}
@@ -732,14 +734,17 @@ footer p { margin: 0; }
           ${c.skipped ? `<div class="t">${esc(c.skipped)}</div>` : ""}
         </div></li>`;
       const paperHtml = (p, i, lowBelow) => {
-        const cc = p.claim_check || {}, prob = cc.problem && !cc.problem.startsWith("not checked") ? cc.problem.replace(/[.\s]+$/, "") : "";
+        const cc = p.claim_check || {}, prob = cc.problem && cc.supported !== "yes" && !cc.problem.startsWith("not checked") ? cc.problem.replace(/[.\s]+$/, "") : "";
+        const off = cc.answers === "no" || cc.answers === "partly", aw = (cc.answers_why || "").replace(/[.\s]+$/, "");
+        const lowWhy = cc.answers === "no" ? (aw || "it does not answer your question") : prob;
         return `<article class="${p.low_confidence ? "low" : ""}"><h3>${i + 1}. ${esc(p.title)}</h3>
           <p class="t mono" style="color:var(--muted);font-size:12.5px">${esc(p.id)} · ${esc(p.published)} · closeness ${Number(p.similarity).toFixed(2)}${p.effort ? ` · effort ${esc(p.effort)}` : ""} · <span class="conf ${esc(p.confidence_label)}">confidence ${p.confidence}% · ${esc(p.confidence_label)}</span></p>
-          ${p.low_confidence ? `<p class="lowc">Low confidence (${p.confidence}%, below ${lowBelow}%)${prob ? ": " + esc(prob) : ""}. Read the paper before using this idea.</p>` : ""}
+          ${p.low_confidence ? `<p class="lowc">Low confidence (${p.confidence}%, below ${lowBelow}%)${lowWhy ? ": " + esc(lowWhy) : ""}. Read the paper before using this idea.</p>` : ""}
           ${p.why ? `<p><span class="k">Why it fits</span>${esc(p.why)}</p>` : ""}
           ${p.what ? `<p><span class="k">What it is</span>${esc(p.what)}</p>` : ""}
           ${p.use_for_us ? `<p><span class="k">Use for us</span>${esc(p.use_for_us)}</p>` : ""}
-          <p class="cc"><span class="k">Claim check</span>${esc(SUPPORTED[cc.supported || ""] || cc.supported)}${prob && !p.low_confidence ? ` · ${esc(prob)}` : ""} · ${esc(p.confidence_why || "")}</p>
+          <p class="cc"><span class="k">Claim check</span>${esc(SUPPORTED[cc.supported || ""] || cc.supported)}${prob && !p.low_confidence ? ` · ${esc(prob)}` : ""}${cc.answers ? ` · <span class="${cc.answers === "no" ? "lowc" : ""}">${esc(ANSWERS[cc.answers] || cc.answers)}</span>` : ""}${off && aw && !(p.low_confidence && cc.answers === "no") ? ` (${esc(aw)})` : ""}</p>
+          <p class="cc"><span class="k">Confidence</span>${esc(p.confidence_why || "")}</p>
           <p><a href="${esc(p.link)}" target="_blank" rel="noopener">Read the paper on arXiv</a></p></article>`;
       };
       const askRun = async () => {
@@ -776,7 +781,7 @@ footer p { margin: 0; }
           now.remove();
           const low = d.papers.filter(p => p.low_confidence).length;
           end.innerHTML = `<p class="outcome">${esc(d.outcome)}</p>
-            ${d.papers.length ? `<p class="t" style="font-size:13.5px;color:var(--muted)">Papers are sorted by confidence. Confidence = how close the paper is to your question (40%) + whether its abstract supports what the agent says (60%), by a fixed rule.${low ? ` <span class="lowc">Below ${d.low_confidence_below}% is low confidence.</span>` : ""}</p>` : ""}
+            ${d.papers.length ? `<p class="t" style="font-size:13.5px;color:var(--muted)">Papers are sorted by confidence. Confidence = how close the paper is to your question (30%) + whether its abstract supports what the agent says (30%) + whether it really answers your question (40%), by a fixed rule.${low ? ` <span class="lowc">Below ${d.low_confidence_below}% is low confidence.</span>` : ""}</p>` : ""}
             <div class="ans">${d.papers.map((p, i) => paperHtml(p, i, d.low_confidence_below)).join("")}</div>
             <div class="row2" style="margin-top:12px"><button type="button" class="ghost" id="ask-keep">Follow this topic every month</button></div>`;
           document.getElementById("ask-keep").addEventListener("click", () => {

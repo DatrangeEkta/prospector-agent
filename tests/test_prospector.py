@@ -775,13 +775,53 @@ class TestAskAgent(AgentSandbox):
         self.assertIn("low confidence", r["outcome"])
         self.assertNotIn("9999.99999", by)
 
+    def test_a_paper_on_a_neighbouring_topic_is_low_even_when_its_summary_is_right(self):
+        self.question_reply = {"reading": "Use AI to improve our own code so servers cost less", "issue": "none",
+                               "note": "", "search_text": "ESG report extraction"}
+        self.script({"useful": [], "next": "search_arxiv", "search_words": "esg report", "thought": "x"},
+                    lambda ids: {"useful": [{"id": i, "why": "fits"} for i in ids if i.startswith("2605")],
+                                 "next": "search_arxiv", "search_words": "more", "thought": "more"})
+        self.claims_reply = lambda ids: {"checks": [
+            {"id": "2605.00010", "supported": "yes", "answers": "yes", "answers_why": "on point"},
+            {"id": "2605.00011", "supported": "yes", "answers": "no",
+             "answers_why": "It is about the cost of running AI models, not improving code."},
+            {"id": "2605.00012", "supported": "yes", "answers": "partly", "answers_why": "related"}]}
+        r = AA.ask("AI to make our code cheaper to run")
+        by = {p["id"]: p for p in r["papers"]}
+        self.assertFalse(by["2605.00010"]["low_confidence"])
+        self.assertGreater(by["2605.00010"]["confidence"], by["2605.00012"]["confidence"])
+        self.assertEqual(by["2605.00011"]["confidence_label"], "Low")
+        self.assertTrue(by["2605.00011"]["low_confidence"])
+        self.assertEqual(by["2605.00012"]["confidence_label"], "Medium")
+        self.assertEqual([p["id"] for p in r["papers"]][0], "2605.00010")
+        prompts = [p for _, p in self.prompts]
+        self.assertTrue(any("WHAT THE USER WANTS: Use AI to improve our own code" in p and '"answers"' in p
+                            for p in prompts))                                    # claim check sees step 0's reading
+        self.assertTrue(any("WHAT THE USER WANTS: Use AI to improve our own code" in p and "CANDIDATE PAPERS" in p
+                            for p in prompts))                                    # and so does the search step
+        self.assertEqual(r["steps"][-1]["ai_wanted"], "search_arxiv 'more'")     # the rule stopped it: shown
+
+    def test_only_the_most_confident_papers_are_shown_and_none_answering_is_said(self):
+        self.script({"useful": [], "next": "search_arxiv", "search_words": "esg report", "thought": "x"},
+                    lambda ids: {"useful": [{"id": i, "why": "fits"} for i in ids if i.startswith("2605")],
+                                 "next": "stop", "thought": "ok"})
+        self.claims_reply = lambda ids: {"checks": [{"id": i, "supported": "yes", "answers": "no"} for i in ids]}
+        r = AA.ask("AI techniques for ESG reports")
+        self.assertLessEqual(len(r["papers"]), AA.SHOW)
+        self.assertIn("None of them really answers your question", r["outcome"])
+
     def test_confidence_rule(self):
         V = AA.verify
-        self.assertEqual(V.confidence(0.80, {"supported": "yes"})[:2], (100, "High"))
-        self.assertEqual(V.confidence(0.50, {"supported": "no"})[:2], (0, "Low"))
-        self.assertEqual(V.confidence(0.65, {"supported": "partly"})[1], "Medium")
+        yes = {"supported": "yes", "answers": "yes"}
+        self.assertEqual(V.confidence(0.80, yes)[:2], (100, "High"))
+        self.assertEqual(V.confidence(0.50, {"supported": "no", "answers": "no"})[:2], (0, "Low"))
+        self.assertEqual(V.confidence(0.65, {"supported": "partly", "answers": "yes"})[1], "Medium")
+        # a faithful summary of a paper that does not answer the question is never trusted
+        self.assertEqual(V.confidence(0.80, {"supported": "yes", "answers": "no"})[1], "Low")
+        self.assertEqual(V.confidence(0.80, {"supported": "yes", "answers": "partly"})[1], "Medium")
+        self.assertEqual(V.confidence(0.80, {"supported": "yes"})[1], "Medium")      # not said: treated as partly
         self.assertLessEqual(V.confidence(0.90, None, ai_checked=False)[0], V.LOW_CONFIDENCE + 10)  # never High
-        self.assertEqual(V.confidence(0.80, {"supported": "yes"}, question_issue="vague")[1], "Medium")  # vague: capped
+        self.assertEqual(V.confidence(0.80, yes, question_issue="vague")[1], "Medium")  # vague: capped
         P.models.ask_json = lambda *a, **k: {"checks": [{"id": "1", "supported": "yes", "problem": ""}]}
         c = V.check_claims("q", [{"id": "1", "abstract": "We cut errors by 12%.", "what": "cuts errors by 45%"}])
         self.assertEqual(c["1"]["supported"], "partly")                          # a number not in the abstract

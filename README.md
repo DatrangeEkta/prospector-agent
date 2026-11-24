@@ -10,7 +10,7 @@ Everything runs locally (Ollama). No client data leaves the machine.
 |---|---|
 | **Owner** | Ekta Datrange (Quants Analyst) |
 | **KRA** | Learning & New AI Tech Implementation: 1-2 new techniques a year with a documented business result |
-| **Models** | `gemma4:e4b` (checks, decisions, notes; stand-in for M006 V4-Flash), `nomic-embed-text` (meaning search) |
+| **Models** | `gemma4:e4b` (step 0, search decisions, notes; stand-in for M006 V4-Flash), `qwen3.5:9b` (judge: claim and relevance check), `nomic-embed-text` (meaning search) |
 | **Sources** | arXiv API (no key needed) |
 
 ## What it does
@@ -21,7 +21,8 @@ Everything runs locally (Ollama). No client data leaves the machine.
    really answer it, and if they are not enough it decides the next step itself: older papers or a live arXiv
    search with search words it chooses. It stops at 3 useful papers, 4 steps or ~150 s. **Every step appears live
    on the page** as it happens, with who decided it (AI or rule). At the end every claim is **checked against the
-   paper's own abstract** and each paper gets a **confidence** (High / Medium / Low; below 50% is shown in light
+   paper's own abstract**, the judge checks the paper **really answers what you want** (not a neighbouring topic),
+   and each paper gets a **confidence** (High / Medium / Low; below 50% is shown in light
    red). No paper is made up; if nothing fits it says so. If arXiv is down it searches the stored papers instead.
 2. **Weekly summary** (web page tab): every question is saved for the person who asked it (`data/users.json`);
    the tab shows their week: questions, answered / unanswered, papers by confidence, what to double-check,
@@ -39,6 +40,7 @@ Everything runs locally (Ollama). No client data leaves the machine.
 pip install -r requirements.txt
 open -a Ollama
 ollama pull gemma4:e4b
+ollama pull qwen3.5:9b
 ollama pull nomic-embed-text
 
 # 2. the web app (Ask the agent + team page)
@@ -106,7 +108,7 @@ are environment variables (see `.env.example`):
 | `PROSPECTOR_DATA` | `./data` | Use another data folder |
 | `PORT` | `8081` | Web app port |
 | `PROSPECTOR_ADMIN_TOKEN` | not set | Needed to start a scan through `POST /api/run` |
-| `JUDGE_MODEL` / `JUDGE_URL` | `gemma4:e4b` on local Ollama | The AI that checks claims against the abstracts (can be a different model from the writer) |
+| `JUDGE_MODEL` / `JUDGE_URL` | `qwen3.5:9b` on local Ollama | The AI that checks claims against the abstracts and whether each paper answers the question (a different model from the writer, so the writer never checks itself) |
 | `PROSPECTOR_LOW_CONFIDENCE` | `50` | Below this confidence (%) a paper is marked low confidence (light red) |
 | `PROSPECTOR_MANUAL_MINUTES` | `30` | Minutes one manual search takes, for the weekly "time saved" estimate. Replace with your measured baseline |
 
@@ -130,8 +132,10 @@ Interactive docs: http://127.0.0.1:8081/api/docs
 - Code ranks and decides; the AI checks, chooses search steps and writes notes inside fixed rules.
 - Only real tools and real arXiv IDs are accepted; a made-up ID is dropped (also in the claim check).
 - Step 0 never changes what the question is about; the question as typed is kept and shown.
-- Confidence is a fixed rule in code (40% closeness, 60% claim check), never the AI's own opinion; a question
-  flagged as vague or off topic can never give "High"; meaning-only runs (AI off) are never "High".
+- Confidence is a fixed rule in code (30% closeness, 30% claims supported by the abstract, 40% the paper
+  answers what the user wants), never the AI's own opinion. A paper that does not answer the question is always
+  Low; "partly" is at most Medium; a vague / off-topic question or a run without the AI is never "High".
+- The search step gets step 0's reading and must keep the user's main subject (e.g. 'code') in its arXiv words.
 - A closed or refreshed browser never leaves the agent busy: the run finishes in its own thread and is saved.
 - arXiv API rules are kept: at most 1 request every 3 s, one at a time; one retry after "429 Too Many Requests";
   the same live search within 6 hours is answered from memory. If arXiv still refuses, stored papers are searched.
