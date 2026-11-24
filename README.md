@@ -15,15 +15,22 @@ Everything runs locally (Ollama). No client data leaves the machine.
 
 ## What it does
 
-1. **Ask the agent** (on demand): type a question. The agent searches the stored papers, the AI keeps only papers
-   that really answer it, and if they are not enough it decides the next step itself: older papers or a live arXiv
-   search with search words it chooses. It stops at 3 useful papers, 4 steps or ~150 s, and every step is shown
-   with who decided it (AI or rule). No paper is made up; if nothing fits it says so.
-2. **Monthly scan** (scheduled): reads ~1,250 new papers, scores them by keywords + meaning against the team's work,
+1. **Ask the agent** (on demand): type a question. **Step 0** checks the question first: the AI says how it reads
+   it and flags a vague or off-topic question, and code catches spelling mistakes against the words in our papers,
+   then searches with the corrected text. The agent searches the stored papers, the AI keeps only papers that
+   really answer it, and if they are not enough it decides the next step itself: older papers or a live arXiv
+   search with search words it chooses. It stops at 3 useful papers, 4 steps or ~150 s. **Every step appears live
+   on the page** as it happens, with who decided it (AI or rule). At the end every claim is **checked against the
+   paper's own abstract** and each paper gets a **confidence** (High / Medium / Low; below 50% is shown in light
+   red). No paper is made up; if nothing fits it says so. If arXiv is down it searches the stored papers instead.
+2. **Weekly summary** (web page tab): every question is saved for the person who asked it (`data/users.json`);
+   the tab shows their week: questions, answered / unanswered, papers by confidence, what to double-check,
+   corrected questions, votes and an estimate of time saved. Link: `http://<server>:8081/?user=Name#weekly`.
+3. **Monthly scan** (scheduled): reads ~1,250 new papers, scores them by keywords + meaning against the team's work,
    and the AI writes "what it is / use for us / data needed / effort" for the top 10.
-3. **Team page**: radar of every matched paper, the top 10 cards, voting, "Tell Prospector" (add interests or
+4. **Team page**: radar of every matched paper, the top 10 cards, voting, "Tell Prospector" (add interests or
    tasks by typing or by Excel upload), and the quarter's pilot.
-4. **Pilot and KRA**: one technique piloted per quarter, its business result and metric recorded, yearly count.
+5. **Pilot and KRA**: one technique piloted per quarter, its business result and metric recorded, yearly count.
 
 ## Quick start
 
@@ -39,7 +46,7 @@ ollama pull nomic-embed-text
 ./scripts/run_server.sh --team     # colleagues on the office network
 
 # 3. command line
-python3 src/prospector.py ask "How do we stop hallucinations in client reports?"
+python3 src/prospector.py ask "How do we stop hallucinations in client reports?" --user Ekta
 python3 src/prospector.py scan                 # monthly scan (last 30 days)
 python3 src/prospector.py settings             # check data/interests.xlsx
 python3 src/prospector.py add "My interest is table extraction"   # add interests / tasks from a message
@@ -57,7 +64,10 @@ python3 -m unittest discover -s tests
 prospector-agent/
 ├── src/
 │   ├── prospector.py          monthly scan, ranking, settings, pilots, KRA, CLI entry point
-│   ├── ask_agent.py           the agent loop: search -> AI check -> AI decides next step -> repeat
+│   ├── ask_agent.py           the agent loop: step 0 check -> search -> AI check -> AI decides next step -> repeat,
+│   │                          sent live as events (ask_steps)
+│   ├── verify.py              step 0 question check, spelling check, claim check, confidence rule
+│   ├── summary.py             weekly summary per person (data/users.json)
 │   ├── models.py              connector for local / company models (Ollama or any OpenAI-compatible URL)
 │   ├── build_radar.py         builds the team page from a scan
 │   ├── radar_template.html    the page design
@@ -69,6 +79,7 @@ prospector-agent/
 │   ├── papers_pool.jsonl      every downloaded paper with its abstract (the agent searches it)
 │   ├── embeddings_cache.npz   paper vectors (each paper embedded once)
 │   ├── votes.json             votes from the web page
+│   ├── users.json             every question per person, for the weekly summary
 │   ├── scans/                 monthly results (.xlsx, .md, .json, dated pages), run and ask logs
 │   ├── radar/radar.html       the latest team page
 │   └── settings_backups/      a copy of interests.xlsx before every change
@@ -76,7 +87,7 @@ prospector-agent/
 │   ├── run_server.sh          start the web app
 │   └── run_monthly.sh         monthly run: start Ollama, check settings, scan, notify
 ├── tests/
-│   ├── test_prospector.py     50 tests (scan, ranking, settings, web app, agent loop, page in headless Chrome)
+│   ├── test_prospector.py     63 tests (scan, ranking, settings, web app, agent loop, live steps, checks, weekly summary, page)
 │   └── fixtures/              saved arXiv feed and sample output
 ├── docs/ARCHITECTURE.md       how it works, models, safety rules
 ├── requirements.txt
@@ -95,13 +106,18 @@ are environment variables (see `.env.example`):
 | `PROSPECTOR_DATA` | `./data` | Use another data folder |
 | `PORT` | `8081` | Web app port |
 | `PROSPECTOR_ADMIN_TOKEN` | not set | Needed to start a scan through `POST /api/run` |
+| `JUDGE_MODEL` / `JUDGE_URL` | `gemma4:e4b` on local Ollama | The AI that checks claims against the abstracts (can be a different model from the writer) |
+| `PROSPECTOR_LOW_CONFIDENCE` | `50` | Below this confidence (%) a paper is marked low confidence (light red) |
+| `PROSPECTOR_MANUAL_MINUTES` | `30` | Minutes one manual search takes, for the weekly "time saved" estimate. Replace with your measured baseline |
 
 ## Web API
 
 | Route | Use |
 |---|---|
 | `GET /` , `GET /month/2026-10` | latest / a given month's page |
-| `POST /api/ask` `{"text"}` | the agent answers one question (steps + papers) |
+| `POST /api/ask` `{"text", "user"}` | the agent answers one question (steps + papers + confidence) |
+| `POST /api/ask/stream` | the same run sent live, one JSON event per line: `status`, `check` (step 0), `step`, `done` |
+| `GET /api/summary?user=&week=` , `GET /api/summary/users` | a person's weekly summary; names with saved questions |
 | `GET/POST /api/votes` | team votes |
 | `POST /api/add/preview`, `POST /api/add` | add interests / tasks from a message |
 | `GET /api/settings/download`, `POST /api/settings/upload` | Excel round trip (uploads only add rows) |
@@ -112,7 +128,13 @@ Interactive docs: http://127.0.0.1:8081/api/docs
 ## Safety rules
 
 - Code ranks and decides; the AI checks, chooses search steps and writes notes inside fixed rules.
-- Only real tools and real arXiv IDs are accepted; a made-up ID is dropped.
+- Only real tools and real arXiv IDs are accepted; a made-up ID is dropped (also in the claim check).
+- Step 0 never changes what the question is about; the question as typed is kept and shown.
+- Confidence is a fixed rule in code (40% closeness, 60% claim check), never the AI's own opinion; a question
+  flagged as vague or off topic can never give "High"; meaning-only runs (AI off) are never "High".
+- A closed or refreshed browser never leaves the agent busy: the run finishes in its own thread and is saved.
+- arXiv API rules are kept: at most 1 request every 3 s, one at a time; one retry after "429 Too Many Requests";
+  the same live search within 6 hours is answered from memory. If arXiv still refuses, stored papers are searched.
 - The agent never repeats a search, has at most 4 steps, and may not give up before one live arXiv search.
 - Paper text is outside data: it is summarised, never followed as instructions.
 - "Ask the agent" never writes to the settings. Excel uploads only add rows, with a backup first.

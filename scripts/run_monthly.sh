@@ -6,7 +6,8 @@ set -o pipefail  # a failing step is not hidden by the tee to the log
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 AGENT="$ROOT/src"
 DATA="${PROSPECTOR_DATA:-$ROOT/data}"
-PY=/Library/Frameworks/Python.framework/Versions/3.14/bin/python3
+PY="$ROOT/.venv/bin/python"   # the project .venv when it exists
+[ -x "$PY" ] || PY=/Library/Frameworks/Python.framework/Versions/3.14/bin/python3
 [ -x "$PY" ] || PY=python3
 LOG="$DATA/scans/monthly_run.log"
 STAMP="$DATA/scans/last_run.txt"

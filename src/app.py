@@ -18,8 +18,11 @@ the app adds an API the page uses when served from here:
     GET  /api/settings/download the current interests.xlsx (topics, work, tasks, skip words), to fill in
     POST /api/settings/upload   a filled copy (raw .xlsx body): checked like the real file; NEW rows are added,
                                 rows deleted or changed in the copy are left as they are in the real file
-    POST /api/ask               {"text"}: the AGENT answers one question with papers (searches, the AI checks the
-                                results and decides the next step); nothing is saved to the settings
+    POST /api/ask               {"text", "user"}: the AGENT answers one question with papers (searches, the AI
+                                checks the results and decides the next step); nothing is saved to the settings
+    POST /api/ask/stream        the same run sent live, one JSON event per line (status, check, step, done)
+    GET  /api/summary?user=&week=   that person's weekly summary (from data/users.json, saved on every question)
+    GET  /api/summary/users     names with a saved question
     GET  /api/health            the latest run report (papers, AI notes, warnings)
     POST /api/run               start a scan (only with the X-Admin-Token header = PROSPECTOR_ADMIN_TOKEN)
     GET  /api/run               status of the last scan started from here
@@ -30,17 +33,19 @@ no login, so keep it on the company network.
 import glob
 import json
 import os
+import queue
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 from datetime import datetime
 
 import pandas as pd
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 CODE = os.path.dirname(os.path.abspath(__file__))   # src/
@@ -48,10 +53,11 @@ HOME = os.environ.get("PROSPECTOR_DATA") or os.path.join(os.path.dirname(CODE), 
 sys.path.insert(0, CODE)
 import prospector  # noqa: E402  (settings: understand, check and append rows)
 import ask_agent  # noqa: E402  (the agent: one question -> search, check, decide, repeat)
+import summary  # noqa: E402  (weekly summary per person, data/users.json)
 MONTH = re.compile(r"^\d{4}-\d{2}$")
 ARXIV_ID = re.compile(r"^\d{4}\.\d{4,5}$")
 _lock = threading.Lock()
-_ask_lock = threading.Lock()   # one question at a time: the local AI answers one prompt at a time anyway
+_busy = {"since": None}   # when the running question started; one question at a time
 _run = {"state": "idle"}
 
 app = FastAPI(title="Research Radar", docs_url="/api/docs", redoc_url=None)
@@ -251,20 +257,98 @@ async def api_settings_upload(request: Request):
 
 class Question(BaseModel):
     text: str = Field(min_length=3, max_length=500)
+    user: str = Field(default="", max_length=60)
+
+
+BUSY_MAX = 400   # seconds: a run that never finished (browser closed mid-stream) frees the agent after this
+
+
+def take_agent():
+    """One question at a time (the local AI answers one prompt at a time anyway)."""
+    with _lock:
+        since = _busy.get("since")
+        if since and time.time() - since < BUSY_MAX:
+            return False
+        _busy["since"] = time.time()
+        return True
+
+
+def free_agent():
+    _busy["since"] = None
 
 
 @app.post("/api/ask")
 def api_ask(q: Question):
-    if not _ask_lock.acquire(timeout=1):
+    if not take_agent():
         raise HTTPException(409, "The agent is answering another question. Try again in a minute.")
     try:
-        return ask_agent.ask(q.text)
+        return ask_agent.ask(q.text, user=q.user)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except RuntimeError as e:
         raise HTTPException(503, str(e))
     finally:
-        _ask_lock.release()
+        free_agent()
+
+
+@app.post("/api/ask/stream")
+def api_ask_stream(q: Question):
+    """The same agent run, sent step by step as it happens (one JSON object per line), so the page can show
+    each step live: status, check (step 0), step, ..., done. A problem mid-run arrives as {"type": "error"}."""
+    if not take_agent():
+        raise HTTPException(409, "The agent is answering another question. Try again in a minute.")
+    events = ask_agent.ask_steps(q.text, user=q.user)
+    try:
+        first = next(events)   # question and model problems become a normal HTTP error, before streaming starts
+    except ValueError as e:
+        free_agent()
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        free_agent()
+        raise HTTPException(503, str(e))
+    except BaseException:
+        free_agent()
+        raise
+
+    # the run continues in its own thread, so a closed or refreshed browser never leaves the agent busy:
+    # the run finishes, is saved for the weekly summary, and frees the agent for the next question
+    box = queue.Queue()
+    box.put(first)
+
+    def work():
+        try:
+            for ev in events:
+                box.put(ev)
+        except Exception as e:  # noqa: BLE001  (shown on the page instead of a broken stream)
+            box.put({"type": "error", "detail": f"The agent stopped: {e}"})
+        finally:
+            free_agent()
+            box.put(None)
+
+    threading.Thread(target=work, daemon=True).start()
+
+    def lines():
+        while (ev := box.get()) is not None:
+            yield json.dumps(ev) + "\n"
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson",
+                             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/summary")
+def api_summary(user: str, week: str | None = None):
+    """One person's weekly summary (Monday to Sunday), built from data/users.json and the team votes."""
+    if not summary.key(user):
+        raise HTTPException(400, "Give your name to see your summary")
+    try:
+        return summary.weekly(user, week, votes=read_votes())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/summary/users")
+def api_summary_users():
+    return {"users": sorted(summary.users().values(), key=str.lower)}
 
 
 @app.get("/api/health")

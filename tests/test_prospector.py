@@ -544,8 +544,8 @@ def paper(pid, title, abstract, days_ago=3):
             "Link": f"https://arxiv.org/abs/{pid}"}
 
 
-class TestAskAgent(Sandbox):
-    """The agent loop with a scripted AI: who decides, what code allows, and what is shown."""
+class AgentSandbox(Sandbox):
+    """A sandbox with stored papers, a fake live arXiv search and a scripted AI (no tests of its own)."""
 
     def setUp(self):
         super().setUp()
@@ -569,18 +569,33 @@ class TestAskAgent(Sandbox):
         P.models.ask_json, AA.live_search = self.saved_ask, self.saved_live
         super().tearDown()
 
+    question_reply = None   # step 0 (input check): None = the AI gives no usable reply, so it is skipped
+    claims_reply = None     # claim check: dict, or a function of the paper IDs; None = no checks
+
     def script(self, *replies):
         """The fake AI gives these replies in order (a function gets the candidate IDs)."""
         it = iter(replies)
+        self.prompts = []
 
         def fake(role, prompt, system=None, temperature=0.0):
+            self.prompts.append((role, prompt))
             if '"papers"' in prompt:   # explain() call: no notes
                 return {"papers": []}
+            if '"reading"' in prompt:   # input check (step 0)
+                return self.question_reply
             ids = re.findall(r"^ID (\S+)", prompt, re.M)
+            if '"checks"' in prompt:   # claim check against the abstracts
+                c = self.claims_reply
+                return (c(ids) if callable(c) else c) or {"checks": []}
             self.calls.append(ids)
             r = next(it)
             return r(ids) if callable(r) else r
         P.models.ask_json = fake
+
+
+
+class TestAskAgent(AgentSandbox):
+    """The agent loop with a scripted AI: who decides, what code allows, and what is shown."""
 
     def test_ai_decides_a_live_search_with_its_own_words_and_stops_at_the_goal(self):
         self.script({"useful": [], "next": "search_arxiv", "search_words": "ESG report extraction",
@@ -641,6 +656,261 @@ class TestAskAgent(Sandbox):
         self.assertEqual(r.json()["steps"][0]["tool"], "search_recent")
         self.assertEqual(os.path.getmtime(P.SETTINGS), before)
         self.assertEqual(TestClient(webapp.app).post("/api/ask", json={"text": "x"}).status_code, 422)
+
+    def test_when_arxiv_is_down_the_agent_searches_stored_papers_and_does_not_retry_arxiv(self):
+        def down(words, days=365, n=40):
+            self.searched.append(words)
+            raise OSError("HTTP Error 429")
+        AA.live_search = down
+        self.script(*[{"useful": [], "next": "search_arxiv", "search_words": f"words {i}", "thought": "x"}
+                      for i in range(4)])
+        r = AA.ask("something rare")
+        self.assertEqual([s["tool"] for s in r["steps"]], ["search_recent", "search_arxiv", "search_stored"])
+        self.assertEqual(len(self.searched), 1)                                  # arXiv tried once only
+        self.assertIn("arXiv is not reachable", r["steps"][1]["note"])
+        self.assertEqual(r["steps"][1]["next_by"], "rule")
+
+    # live steps --------------------------------------------------------------------------------------------
+    def test_steps_arrive_one_by_one_before_the_answer(self):
+        self.script({"useful": [], "next": "search_arxiv", "search_words": "ESG report extraction", "thought": "x"},
+                    lambda ids: {"useful": [{"id": i, "why": "about ESG"} for i in ids if i.startswith("2605")],
+                                 "next": "stop", "thought": "good"})
+        events = list(AA.ask_steps("AI techniques for ESG reports"))
+        kinds = [e["type"] for e in events]
+        self.assertEqual(kinds[-1], "done")
+        self.assertEqual(kinds.count("check"), 1)
+        self.assertLess(kinds.index("check"), kinds.index("step"))              # step 0 comes first
+        steps = [e["step"] for e in events if e["type"] == "step"]
+        self.assertEqual(steps, events[-1]["result"]["steps"])                   # same steps as the final answer
+        self.assertTrue(all("next" in s and "next_by" in s for s in steps))      # each step is complete when sent
+        self.assertIn("status", kinds)
+
+    def test_stream_endpoint_sends_one_event_per_line_and_frees_the_agent(self):
+        sys.path.insert(0, SRC)
+        import app as webapp
+        from fastapi.testclient import TestClient
+        c = TestClient(webapp.app)
+        for _ in range(2):   # a second question works: the agent was freed after the first
+            self.script(lambda ids: {"useful": [{"id": i, "why": "fits"} for i in ids[:1]], "next": "stop",
+                                     "thought": "ok"})
+            r = c.post("/api/ask/stream", json={"text": "hallucination detection in financial reports", "user": "Ekta"})
+            self.assertEqual(r.status_code, 200)
+            events = [json.loads(line) for line in r.text.splitlines() if line.strip()]
+            self.assertEqual(events[-1]["type"], "done")
+            self.assertEqual(events[-1]["result"]["user"], "Ekta")
+        webapp._busy["since"] = __import__("time").time()   # another question is running
+        self.assertEqual(c.post("/api/ask/stream", json={"text": "anything at all"}).status_code, 409)
+        webapp._busy["since"] = None
+        self.assertEqual(c.post("/api/ask/stream", json={"text": "x"}).status_code, 422)
+
+    def test_a_browser_that_leaves_mid_run_does_not_keep_the_agent_busy(self):
+        import time as _t
+        import summary as S
+        sys.path.insert(0, SRC)
+        import app as webapp
+        from fastapi.testclient import TestClient
+        self.script(lambda ids: {"useful": [{"id": i, "why": "fits"} for i in ids[:1]], "next": "stop", "thought": "ok"})
+        with TestClient(webapp.app).stream("POST", "/api/ask/stream",
+                                           json={"text": "hallucination detection in reports", "user": "Ekta"}) as r:
+            next(r.iter_lines())   # read the first event, then the browser is gone
+        for _ in range(50):
+            if webapp._busy["since"] is None:
+                break
+            _t.sleep(0.1)
+        self.assertIsNone(webapp._busy["since"])                                 # free for the next question
+        self.assertEqual(S.weekly("Ekta")["totals"]["questions"], 1)             # and the run was still saved
+
+    # input check -------------------------------------------------------------------------------------------
+    def test_input_check_spots_a_typo_and_searches_the_corrected_question(self):
+        self.question_reply = {"reading": "Ways to detect hallucinations in financial reports", "issue": "typo",
+                               "note": "'halucinaton' looks like 'hallucination'.",
+                               "search_text": "hallucination detection in financial reports"}
+        self.script(lambda ids: {"useful": [{"id": i, "why": "fits"} for i in ids[:1]], "next": "stop", "thought": "ok"})
+        r = AA.ask("halucinaton detecton in finacial reports")
+        self.assertEqual(r["check"]["issue"], "typo")
+        self.assertIn("hallucination", r["check"]["note"])
+        self.assertEqual(r["question"], "halucinaton detecton in finacial reports")     # what the user typed is kept
+        judge_prompts = [p for role, p in self.prompts if "CANDIDATE PAPERS" in p]
+        self.assertIn("QUESTION: hallucination detection in financial reports", judge_prompts[0])
+        self.assertIn("2611.00001", [p["id"] for p in r["papers"]])
+
+    def test_input_check_never_changes_the_question_when_nothing_is_wrong_or_the_ai_is_off(self):
+        self.question_reply = {"reading": "ESG", "issue": "none", "note": "ignored", "search_text": "something else"}
+        self.script(lambda ids: {"useful": [], "next": "stop", "thought": "x"}, {"useful": [], "next": "stop"})
+        r = AA.ask("ESG report extraction")
+        self.assertEqual((r["check"]["search_text"], r["check"]["note"]), ("ESG report extraction", ""))
+        P.models.ask_json = lambda *a, **k: None
+        r = AA.ask("ESG report extraction", use_ai=False)
+        self.assertEqual(r["check"]["by"], "rule")
+        self.assertIn("searched as typed", r["check"]["skipped"])
+
+    def test_code_finds_typos_the_ai_missed_even_with_the_ai_off(self):
+        P.models.ask_json = lambda *a, **k: None
+        r = AA.ask("halucination detection in financial reports", use_ai=False)
+        self.assertEqual(r["check"]["issue"], "typo")
+        self.assertEqual(r["check"]["search_text"], "hallucination detection in financial reports")
+        self.assertEqual(r["check"]["spelling"], [{"typed": "halucination", "suggested": "hallucination"}])
+        r = AA.ask("ESG report extraction", use_ai=False)                       # correct words: nothing flagged
+        self.assertEqual(r["check"]["issue"], "none")
+
+    # claim check and confidence ----------------------------------------------------------------------------
+    def test_a_claim_the_abstract_does_not_support_gets_low_confidence(self):
+        self.script({"useful": [], "next": "search_arxiv", "search_words": "esg report", "thought": "x"},
+                    lambda ids: {"useful": [{"id": i, "why": "about ESG"} for i in ids if i.startswith("2605")],
+                                 "next": "stop", "thought": "good"})
+        self.claims_reply = lambda ids: {"checks": [
+            {"id": "2605.00011", "supported": "no", "problem": "The abstract is about retrieval, not extraction."},
+            {"id": "2605.00010", "supported": "yes", "problem": ""},
+            {"id": "2605.00012", "supported": "yes", "problem": ""},
+            {"id": "9999.99999", "supported": "yes"}]}                             # made up: ignored
+        r = AA.ask("AI techniques for ESG reports")
+        by = {p["id"]: p for p in r["papers"]}
+        bad = by["2605.00011"]
+        self.assertTrue(bad["low_confidence"])
+        self.assertEqual(bad["confidence_label"], "Low")
+        self.assertLess(bad["confidence"], AA.verify.LOW_CONFIDENCE)
+        self.assertIn("retrieval", bad["claim_check"]["problem"])
+        self.assertFalse(by["2605.00010"]["low_confidence"])
+        self.assertEqual(r["papers"][-1]["id"], "2605.00011")                     # sorted by confidence
+        self.assertIn("low confidence", r["outcome"])
+        self.assertNotIn("9999.99999", by)
+
+    def test_confidence_rule(self):
+        V = AA.verify
+        self.assertEqual(V.confidence(0.80, {"supported": "yes"})[:2], (100, "High"))
+        self.assertEqual(V.confidence(0.50, {"supported": "no"})[:2], (0, "Low"))
+        self.assertEqual(V.confidence(0.65, {"supported": "partly"})[1], "Medium")
+        self.assertLessEqual(V.confidence(0.90, None, ai_checked=False)[0], V.LOW_CONFIDENCE + 10)  # never High
+        self.assertEqual(V.confidence(0.80, {"supported": "yes"}, question_issue="vague")[1], "Medium")  # vague: capped
+        P.models.ask_json = lambda *a, **k: {"checks": [{"id": "1", "supported": "yes", "problem": ""}]}
+        c = V.check_claims("q", [{"id": "1", "abstract": "We cut errors by 12%.", "what": "cuts errors by 45%"}])
+        self.assertEqual(c["1"]["supported"], "partly")                          # a number not in the abstract
+        self.assertIn("45", c["1"]["problem"])
+
+
+class TestArxivRules(Sandbox):
+    """The Ask agent keeps to arXiv's API rules: 1 request every 3 s, one retry after 429, repeats from memory."""
+
+    def setUp(self):
+        super().setUp()
+        import urllib.error
+        self.err = urllib.error.HTTPError
+        self.saved_net = (AA.urllib.request.urlopen, AA.ARXIV_GAP, AA.ARXIV_RETRY_WAIT, AA.time.sleep)
+        self.calls, self.slept, self.fail = [], [], 0
+        AA._arxiv_cache.clear()
+        AA._arxiv_last[0] = 0.0
+        feed = open(FEED, "rb").read()
+        test = self
+
+        class Resp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self): return feed
+
+        def urlopen(req, timeout=30, context=None):
+            test.calls.append(req.full_url)
+            if test.fail:
+                test.fail -= 1
+                raise test.err(req.full_url, 429, "Too Many Requests", {"Retry-After": "2"}, None)
+            return Resp()
+        AA.urllib.request.urlopen = urlopen
+        AA.time.sleep = lambda s: self.slept.append(round(s, 1))
+
+    def tearDown(self):
+        AA.urllib.request.urlopen, AA.ARXIV_GAP, AA.ARXIV_RETRY_WAIT, AA.time.sleep = self.saved_net
+        AA._arxiv_cache.clear()
+        super().tearDown()
+
+    def test_requests_are_spaced_three_seconds_apart(self):
+        AA.arxiv("https://export.arxiv.org/api/query?a=1")
+        AA.arxiv("https://export.arxiv.org/api/query?a=2")
+        self.assertEqual(len(self.calls), 2)
+        self.assertTrue(self.slept and 2.5 <= self.slept[-1] <= 3.0)              # waited before the second
+
+    def test_a_429_is_retried_once_after_the_wait_arxiv_asks_for(self):
+        self.fail = 1
+        papers = AA.arxiv("https://export.arxiv.org/api/query?b=1")
+        self.assertTrue(papers)
+        self.assertEqual(len(self.calls), 2)
+        self.assertIn(2.0, self.slept)                                            # Retry-After: 2
+        self.fail = 2
+        with self.assertRaises(self.err):                                         # still refused: the agent falls back
+            AA.arxiv("https://export.arxiv.org/api/query?b=2")
+
+    def test_the_same_search_again_is_answered_from_memory(self):
+        first = AA.arxiv("https://export.arxiv.org/api/query?c=1")
+        again = AA.arxiv("https://export.arxiv.org/api/query?c=1")
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual([p["arXiv ID"] for p in first], [p["arXiv ID"] for p in again])
+
+
+class TestWeeklySummary(AgentSandbox):
+    """Every question is saved for its user in users.json; the summary is that user's week."""
+
+    def ask_as(self, user, question, answered=True):
+        if answered:
+            self.script(lambda ids: {"useful": [{"id": i, "why": "fits"} for i in ids[:1]], "next": "stop",
+                                     "thought": "ok"})
+        else:
+            self.live = []
+            self.script({"useful": [], "next": "stop", "thought": "x"}, {"useful": [], "next": "stop", "thought": "x"},
+                        {"useful": [], "next": "stop", "thought": "x"}, {"useful": [], "next": "stop", "thought": "x"})
+        return AA.ask(question, user=user)
+
+    def test_questions_are_saved_per_user_and_summed_for_the_week(self):
+        import summary as S
+        self.ask_as("Ekta", "hallucination detection in financial reports")
+        self.ask_as("Ekta", "gift card fraud prevention", answered=False)
+        self.ask_as("Ravi", "option pricing with neural networks")
+        self.assertTrue(os.path.exists(os.path.join(self.tmp, "users.json")))
+        month = pd.Timestamp.now().strftime("%Y-%m")
+        w = S.weekly("ekta", votes={month: {"EKTA": ["2611.00001"], "Ravi": ["2611.00002"]}})   # name: any case
+        self.assertEqual((w["totals"]["questions"], w["totals"]["answered"], w["totals"]["unanswered"]), (2, 1, 1))
+        self.assertEqual(w["unanswered"][0]["question"], "gift card fraud prevention")
+        self.assertEqual(w["totals"]["votes"], 1)
+        self.assertEqual(w["team"], {"people": 2, "questions": 3})
+        self.assertNotIn("option pricing", json.dumps(w["questions"]))            # only this user's questions
+        self.assertTrue(any("honestly unanswered" in h for h in w["highlights"]))
+        self.assertEqual(S.users(), {"ekta": "Ekta", "ravi": "Ravi"})
+
+    def test_other_weeks_are_kept_apart_and_the_web_app_serves_the_summary(self):
+        import summary as S
+        from datetime import datetime, timedelta
+        r = self.ask_as("Ekta", "hallucination detection in financial reports")
+        S.record(r, when=datetime.now() - timedelta(days=14))                    # the same question two weeks ago
+        w = S.weekly("Ekta")
+        self.assertEqual(w["totals"]["questions"], 1)
+        self.assertEqual(len(w["weeks"]), 2)
+        old = S.weekly("Ekta", week=w["weeks"][1])
+        self.assertEqual(old["totals"]["questions"], 1)
+        sys.path.insert(0, SRC)
+        import app as webapp
+        from fastapi.testclient import TestClient
+        saved, webapp.HOME = webapp.HOME, self.tmp
+        try:
+            c = TestClient(webapp.app)
+            got = c.get("/api/summary", params={"user": "Ekta"})
+            self.assertEqual(got.status_code, 200)
+            self.assertEqual(got.json()["totals"]["questions"], 1)
+            self.assertEqual(c.get("/api/summary", params={"user": " "}).status_code, 400)
+            self.assertEqual(c.get("/api/summary", params={"user": "Ekta", "week": "last"}).status_code, 400)
+            self.assertEqual(c.get("/api/summary/users").json(), {"users": ["Ekta"]})
+        finally:
+            webapp.HOME = saved
+
+    def test_no_name_counts_for_the_team_only(self):
+        import summary as S
+        self.ask_as("", "hallucination detection in financial reports")
+        self.assertEqual(S.users(), {})
+        self.assertEqual(S.weekly("Someone")["team"]["questions"], 1)
+
+    def test_a_broken_users_file_never_stops_the_agent(self):
+        import summary as S
+        with open(S.users_file(), "w") as f:
+            f.write("{not json")
+        r = self.ask_as("Ekta", "hallucination detection in financial reports")
+        self.assertTrue(r["papers"])
+        self.assertEqual(S.weekly("Ekta")["totals"]["questions"], 1)
 
 
 class TestRadarPage(Sandbox):

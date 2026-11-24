@@ -25,3 +25,4 @@ data/settings_backups/
 # Keys and secrets
 *.pem
 *.key
+data/users.json

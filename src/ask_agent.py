@@ -25,7 +25,9 @@ Paper text is outside data: it is only judged and summarised, never followed. No
 import csv
 import os
 import re
+import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -33,6 +35,8 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 
 import prospector as P
+import summary
+import verify
 
 ROUNDS = 4          # most search steps for one question
 ENOUGH = 3          # stop once this many papers really answer the question
@@ -47,6 +51,8 @@ TOOLS = {
     "stop": "finish now",
 }
 ORDER = ["search_recent", "search_stored", "search_arxiv"]
+DOING = {"search_recent": "searching this month's stored papers", "search_stored": "searching all stored papers",
+         "search_arxiv": "searching arXiv live"}
 STOP_WORDS = set("""a an and are as at be by can could do does for from how i in into is it its me my of on or our
 should so that the their them there these this to us using use want we what when where which who why will with
 would you your ai about find help best way ways new technique techniques paper papers""".split())
@@ -81,10 +87,47 @@ def stored(days=None):
     return list(have.values())
 
 
+ARXIV_GAP = 3.0          # arXiv API terms: at most one request every 3 seconds, one at a time
+ARXIV_RETRY_WAIT = 5.0   # after "429 Too Many Requests" with no Retry-After: wait this long, then try once more
+ARXIV_CACHE_HOURS = 6    # the same search within this time is answered from memory, without calling arXiv
+_arxiv_lock = threading.Lock()   # one request at a time, for every question on this server
+_arxiv_last = [0.0]
+_arxiv_cache = {}                # url -> (time, papers)
+
+
+def _arxiv_get(query_url):
+    """One request, spaced at least ARXIV_GAP seconds after the previous one (the lock keeps them one at a time)."""
+    with _arxiv_lock:
+        wait = _arxiv_last[0] + ARXIV_GAP - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        try:
+            req = urllib.request.Request(query_url, headers={"User-Agent": "technique-prospector/1.0"})
+            with urllib.request.urlopen(req, timeout=30, context=P.ssl_context()) as r:
+                return r.read()
+        finally:
+            _arxiv_last[0] = time.monotonic()
+
+
 def arxiv(query_url):
-    req = urllib.request.Request(query_url, headers={"User-Agent": "technique-prospector/1.0"})
-    with urllib.request.urlopen(req, timeout=30, context=P.ssl_context()) as r:
-        return P.parse(r.read())
+    """arXiv within its rules: cached for ARXIV_CACHE_HOURS, spaced 3 s apart, one retry after a 429 / 503."""
+    hit = _arxiv_cache.get(query_url)
+    if hit and time.time() - hit[0] < ARXIV_CACHE_HOURS * 3600:
+        return [dict(p) for p in hit[1]]
+    try:
+        body = _arxiv_get(query_url)
+    except urllib.error.HTTPError as e:
+        if e.code not in (429, 503):
+            raise
+        try:
+            wait = float(e.headers.get("Retry-After") or ARXIV_RETRY_WAIT)
+        except (TypeError, ValueError):
+            wait = ARXIV_RETRY_WAIT
+        time.sleep(min(wait, 15))   # never hold a question for long: the agent falls back to stored papers
+        body = _arxiv_get(query_url)
+    papers = P.parse(body)
+    _arxiv_cache[query_url] = (time.time(), [dict(p) for p in papers])
+    return papers
 
 
 def live_search(words, days=365, n=40):
@@ -157,14 +200,17 @@ def judge(question, cands, steps, have):
             "thought": plain(res.get("thought"), 240)}
 
 
-def choose(decision, steps, found, question):
+def choose(decision, steps, found, question, arxiv_down=False):
     """The next (tool, words, note) inside the rules, or None to stop. The AI's choice is kept when it is allowed."""
     tried = {(s["tool"], s["words"]) for s in steps}
     tools_used = {s["tool"] for s in steps}
     default_words = search_words(question, 4)
     nxt, words, note = (decision or {}).get("next"), (decision or {}).get("words", ""), ""
     if nxt is None:   # no AI (or an unknown tool): next place in the fixed order
-        nxt = next((t for t in ORDER if t not in tools_used), "stop")
+        nxt = next((t for t in ORDER if t not in tools_used and not (arxiv_down and t == "search_arxiv")), "stop")
+    if nxt == "search_arxiv" and arxiv_down:   # arXiv failed once this run: do not wait on it again
+        alt = "search_stored" if "search_stored" not in tools_used else "stop"
+        return None if alt == "stop" else (alt, "", "rule: arXiv is not reachable, so searching all stored papers instead")
     if nxt == "stop" and not found and "search_arxiv" not in tools_used:
         nxt, note = "search_arxiv", "rule: nothing useful yet, so one live arXiv search before giving up"
     if nxt == "stop":
@@ -186,30 +232,61 @@ def choose(decision, steps, found, question):
     return nxt, words, note
 
 
-def ask(question, use_ai=True):
-    """Run the agent on one question. Returns {question, steps, papers, outcome, seconds, ai}."""
+def ask(question, use_ai=True, user=""):
+    """Run the agent on one question. Returns {question, check, steps, papers, outcome, seconds, ai, user}."""
+    result = None
+    for event in ask_steps(question, use_ai, user):
+        if event["type"] == "done":
+            result = event["result"]
+    return result
+
+
+def ask_steps(question, use_ai=True, user=""):
+    """The agent run as live events, so the page shows each step while the agent works:
+        {"type": "status", "text"}   what the agent is doing right now
+        {"type": "check", "check"}   step 0, the input check: how the question was read, any problem in it
+        {"type": "step", "step"}     one finished search step, with its next move and who decided it
+        {"type": "done", "result"}   the full result (what ask() returns)
+    Raises ValueError / RuntimeError before the first event when the question or the models are not usable."""
     t0 = time.time()
-    question = plain(question, 500)
+    question, user = plain(question, 500), plain(user, 60)
     if len(question) < 3:
         raise ValueError("Type a question first")
-    q = P.models.embed([f"search_query: {question}"])
-    if q is None:
+    if P.models.embed(["search_query: ready"]) is None:
         raise RuntimeError("The local embedding model (nomic-embed-text) is not running. Start Ollama and try again.")
+
+    # step 0: input check. The AI says how it reads the question and flags a typo / vague / off-topic question
+    yield {"type": "status", "text": "Step 0: checking your question…"}
+    check = verify.check_question(question) if use_ai else None
+    if check is None:
+        check = {"reading": "", "issue": "none", "note": "", "search_text": question, "by": "rule",
+                 "skipped": "The AI is off, so the question is searched as typed." if not use_ai
+                 else "The AI did not reply, so the question is searched as typed."}
+    check = verify.with_spelling(check, question, stored())   # typos by code, also when the AI is off
+    wanted = check["search_text"]   # the question with spelling fixed / made specific; same topic
+    yield {"type": "check", "check": check}
+    q = P.models.embed([f"search_query: {wanted}"])
+    if q is None:
+        raise RuntimeError("The local embedding model (nomic-embed-text) stopped. Start Ollama and try again.")
     qvec = unit(q[0])
+
     steps, found, checked = [], {}, set()   # found: id -> {paper, why, sim}
-    action, ai_ok = ("search_recent", "", ""), use_ai
+    action, ai_ok, arxiv_down = ("search_recent", "", ""), use_ai, False
     while action and len(steps) < ROUNDS:
         tool, words, note = action
         error = ""
+        yield {"type": "status", "text": f"Step {len(steps) + 1}: {DOING[tool]}" + (f" for '{words}'" if words else "") + "…"}
         try:
             pool = (stored(30) if tool == "search_recent" else stored() if tool == "search_stored"
                     else live_search(words))
         except Exception as e:
-            pool, error = [], f"arXiv not reachable ({type(e).__name__})"
+            pool, error, arxiv_down = [], f"arXiv not reachable ({type(e).__name__})", True
         cands = closest(qvec, pool, checked)
         checked |= {p["arXiv ID"] for _, p in cands}
         fill_abstracts([p for _, p in cands])
-        decision = judge(question, cands, steps, len(found)) if ai_ok else None
+        if ai_ok and cands:
+            yield {"type": "status", "text": f"Step {len(steps) + 1}: the AI is reading {len(cands)} abstracts…"}
+        decision = judge(wanted, cands, steps, len(found)) if ai_ok else None
         if ai_ok and decision is None:
             ai_ok = False   # the AI is off or replied badly: the rest of the run goes by meaning only
         useful = decision["useful"] if decision else {p["arXiv ID"]: "" for s, p in cands if s >= RULE_SIM}
@@ -219,15 +296,17 @@ def ask(question, use_ai=True):
         step = {"n": len(steps) + 1, "tool": tool, "words": words, "looked_at": len(pool), "checked": len(cands),
                 "relevant": [p["arXiv ID"] for _, p in cands if p["arXiv ID"] in useful],
                 "thought": decision["thought"] if decision else "", "by": "AI" if decision else "rule",
-                "note": note or error}
+                "note": note or error, "seconds": round(time.time() - t0, 1)}
         steps.append(step)
         if len(found) >= ENOUGH:
             step["next"], step["next_by"] = f"stop: goal reached ({len(found)} useful, goal {ENOUGH})", "rule"
+            yield {"type": "step", "step": step}
             break
         if time.time() - t0 > SECONDS:
             step["next"], step["next_by"] = "stop: time is up", "rule"
+            yield {"type": "step", "step": step}
             break
-        action = choose(decision, steps, found, question)
+        action = choose(decision, steps, found, wanted, arxiv_down)
         step["next"] = (f"{action[0]}" + (f" '{action[1]}'" if action[1] else "")) if action else "stop"
         ai_choice = bool(decision) and decision.get("next") == (action[0] if action else "stop") and \
             not (action and action[2])
@@ -236,12 +315,15 @@ def ask(question, use_ai=True):
             step["note"] = action[2]
         if action and len(steps) >= ROUNDS:
             step["next"], step["next_by"], step["note"] = f"stop: step limit ({ROUNDS}) reached", "rule", ""
+        yield {"type": "step", "step": step}
+
     best = sorted(found.values(), key=lambda f: -f["sim"])[:SHOW]
     notes = {}
     if best and ai_ok:
+        yield {"type": "status", "text": "Writing what each paper is and how we could use it…"}
         for f in best:
             f["paper"]["Closest work"] = "Your question"
-        notes = P.explain([f["paper"] for f in best], {"Your question": question}) or {}
+        notes = P.explain([f["paper"] for f in best], {"Your question": wanted}) or {}
     papers = []
     for f in best:
         p, n = f["paper"], notes.get(f["paper"]["arXiv ID"], {})
@@ -249,14 +331,33 @@ def ask(question, use_ai=True):
                        "link": p.get("Link") or f"https://arxiv.org/abs/{p['arXiv ID']}", "similarity": f["sim"],
                        "why": f["why"], "what": n.get("what", ""), "use_for_us": n.get("use_for_us", ""),
                        "effort": n.get("effort", "")})
+
+    # claim check: every line shown is checked against the paper's own abstract, then a confidence by rule
+    claims = {}
+    if papers and ai_ok:
+        yield {"type": "status", "text": "Checking every claim against the paper's own abstract…"}
+        abstracts = {f["paper"]["arXiv ID"]: f["paper"].get("Abstract", "") for f in best}
+        claims = verify.check_claims(wanted, [{**p, "abstract": abstracts.get(p["id"], "")} for p in papers])
+    for p in papers:
+        c = claims.get(p["id"])
+        p["claim_check"] = c or {"supported": "", "problem": "not checked" + ("" if ai_ok else " (AI off)")}
+        p["confidence"], p["confidence_label"], p["confidence_why"] = verify.confidence(p["similarity"], c, ai_ok, check["issue"])
+        p["low_confidence"] = p["confidence"] < verify.LOW_CONFIDENCE
+    papers.sort(key=lambda p: -p["confidence"])
+
     places = len(steps)
     outcome = (f"Found {len(found)} useful paper{'s' * (len(found) != 1)} in {places} step{'s' * (places != 1)}."
                if found else f"Searched {places} place{'s' * (places != 1)}: no paper really answers this yet. "
                              "Nothing is made up, so nothing is shown.")
-    result = {"question": question, "steps": steps, "papers": papers, "outcome": outcome,
-              "seconds": round(time.time() - t0, 1), "ai": P.models.model_name("writer") if ai_ok else "off"}
+    low = sum(p["low_confidence"] for p in papers)
+    if low:
+        outcome += f" {low} of them with low confidence: read the paper before using it."
+    result = {"question": question, "check": check, "steps": steps, "papers": papers, "outcome": outcome,
+              "seconds": round(time.time() - t0, 1), "ai": P.models.model_name("writer") if ai_ok else "off",
+              "user": user, "low_confidence_below": verify.LOW_CONFIDENCE}
     log(result)
-    return result
+    summary.record(result)
+    yield {"type": "done", "result": result}
 
 
 def log(result):
@@ -275,6 +376,11 @@ def log(result):
 def show(r):
     """The run as text, for the command line."""
     lines = [f"Question: {r['question']}", ""]
+    c = r.get("check") or {}
+    lines.append(f"Step 0  question check ({'AI' if c.get('by') == 'AI' else 'code'}): "
+                 + (c.get("reading") or c.get("skipped") or ""))
+    if c.get("issue", "none") != "none":
+        lines.append(f"   problem ({c['issue']}): {c['note']}  -> searched as: {c['search_text']}")
     for s in r["steps"]:
         where = TOOLS[s["tool"]] + (f": '{s['words']}'" if s["words"] else "")
         lines.append(f"Step {s['n']}  {s['tool']}  ({where})")
@@ -288,6 +394,11 @@ def show(r):
     lines += ["", r["outcome"]]
     for i, p in enumerate(r["papers"], 1):
         lines.append(f"\n{i}. {p['title']}  ({p['id']}, {p['published']}, closeness {p['similarity']:.2f})")
+        lines.append(f"   confidence: {p['confidence']}% {p['confidence_label']}"
+                     + ("  LOW: read the paper before using it" if p["low_confidence"] else "")
+                     + f"  ({p['confidence_why']})")
+        if p["claim_check"].get("problem"):
+            lines.append(f"   claim check: {p['claim_check']['problem']}")
         for k, label in (("why", "why it fits"), ("what", "what it is"), ("use_for_us", "use for us")):
             if p[k]:
                 lines.append(f"   {label}: {p[k]}")

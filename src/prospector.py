@@ -1183,7 +1183,7 @@ def cmd_add(a):
 def cmd_ask(a):
     import ask_agent
     try:
-        r = ask_agent.ask(" ".join(a.text), use_ai=not a.no_model)
+        r = ask_agent.ask(" ".join(a.text), use_ai=not a.no_model, user=a.user or "")
     except (ValueError, RuntimeError) as e:
         sys.exit(str(e))
     print(ask_agent.show(r))
@@ -1258,6 +1258,7 @@ def main():
     s = sub.add_parser("ask", help='agent: answer one question with papers, deciding its own search steps')
     s.add_argument("text", nargs="+")
     s.add_argument("--no-model", action="store_true", help="by meaning only, no AI checks")
+    s.add_argument("--user", help="your name: the question is saved for your weekly summary")
     s = sub.add_parser("report", help="KRA summary")
     s.add_argument("--out", default=os.path.join(HERE, "Prospector_KRA.xlsx"))
     a = p.parse_args()

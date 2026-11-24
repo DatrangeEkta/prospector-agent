@@ -8,7 +8,11 @@
 question
    │
    ▼
-embed the question (nomic-embed-text)
+STEP 0  input check: AI reads the question (typo / vague / off topic, corrected search text, same topic)
+        + code spelling check against the words in our papers and the system word list
+   │
+   ▼
+embed the corrected question (nomic-embed-text)
    │
    ▼
 ┌───────────────────────── loop: at most 4 steps, ~150 s ─────────────────────────┐
@@ -20,8 +24,26 @@ embed the question (nomic-embed-text)
 └──────────────────────────────────────────────────────────────────────────────────┘
    │
    ▼
-AI writes "what it is / use for us / effort" for the best 3  →  steps + papers on the page
+AI writes "what it is / use for us / effort" for the best 3
+   │
+   ▼
+CLAIM CHECK  judge role reads each paper's abstract: are "why / what / use for us" supported? (yes/partly/no)
+             + code: numbers in the claims that are not in the abstract
+   │
+   ▼
+CONFIDENCE (code) = 40% closeness by meaning + 60% claim check; below PROSPECTOR_LOW_CONFIDENCE = low (light red)
+   │
+   ▼
+papers sorted by confidence  →  saved to data/users.json (weekly summary)
 ```
+
+Every stage is sent to the page as it happens (`ask_agent.ask_steps()` yields `status`, `check`, `step`, `done`
+events; `POST /api/ask/stream` sends them one JSON object per line). The run itself happens in a background
+thread, so the agent always finishes and frees itself even if the browser is closed. `ask()` collects the same
+events, so the CLI and `POST /api/ask` are unchanged.
+
+If arXiv fails once in a run, a rule stops the agent from trying it again and it searches all stored papers
+instead.
 
 Tools:
 

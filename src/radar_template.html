@@ -19,6 +19,8 @@
   --quant: #4A55C9;
   --quant-soft: #E3E5FA;
   --good: #1E7A45;
+  --low: #C94848;
+  --low-soft: #FBEAEA;
   --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
   --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
@@ -26,12 +28,12 @@
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #0B1312; --surface: #12201E; --ink: #E4EDEB; --muted: #8DA09D; --line: #233533; --grid: #2C4340;
   --teal: #43C2B6; --teal-soft: #173431; --signal: #F2A93B; --signal-soft: #3A2A12;
-  --quant: #929BFF; --quant-soft: #23264A; --good: #5BCB8A; color-scheme: dark;
+  --quant: #929BFF; --quant-soft: #23264A; --good: #5BCB8A; --low: #FF9090; --low-soft: #3A1C1C; color-scheme: dark;
 } }
 :root[data-theme="dark"] {
   --bg: #0B1312; --surface: #12201E; --ink: #E4EDEB; --muted: #8DA09D; --line: #233533; --grid: #2C4340;
   --teal: #43C2B6; --teal-soft: #173431; --signal: #F2A93B; --signal-soft: #3A2A12;
-  --quant: #929BFF; --quant-soft: #23264A; --good: #5BCB8A; color-scheme: dark;
+  --quant: #929BFF; --quant-soft: #23264A; --good: #5BCB8A; --low: #FF9090; --low-soft: #3A1C1C; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.55; }
@@ -100,6 +102,50 @@ section { padding-block: 34px; border-top: 1px solid var(--line); }
 .ask .ans h3 { font-family: var(--display); font-size: 16.5px; margin: 0; overflow-wrap: anywhere; }
 .ask .ans p { margin: 5px 0 0; font-size: 14px; }
 .ask .ans .k { font-family: var(--mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 6px; }
+
+.ask ol.steps li.live { animation: stepin .35s ease-out; }
+@keyframes stepin { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ask ol.steps li.live { animation: none; } }
+.ask ol.steps li.s0 .n { background: var(--signal-soft); color: var(--signal); }
+.ask .now { margin-top: 10px; font-size: 13.5px; color: var(--teal); font-family: var(--mono); }
+.ask .now::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--teal); margin-right: 8px; animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+.ask .flag { color: var(--signal); font-weight: 600; }
+.conf { font-family: var(--mono); font-size: 11.5px; border-radius: 999px; padding: 1px 8px; background: var(--teal-soft); color: var(--teal); white-space: nowrap; }
+.conf.Medium { background: var(--signal-soft); color: var(--signal); }
+.conf.Low { background: var(--low-soft); color: var(--low); }
+.lowc { color: var(--low); }
+.ask .ans article.low { border-left: 3px solid var(--low); }
+.ask .ans .cc { font-size: 13px; color: var(--muted); }
+.ask input#ask-user { flex: 0 1 170px; }
+
+/* Tabs (web app only) */
+.tabs { display: flex; gap: 6px; padding-top: 18px; }
+.tabs button { font: inherit; font-size: 14px; border-radius: 999px; padding: 6px 16px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.tabs button[aria-selected="true"] { background: var(--teal); border-color: var(--teal); color: var(--surface); }
+#weekly { display: none; }
+body.tab-weekly .wrap > *:not(#tabs):not(#weekly) { display: none !important; }
+body.tab-weekly #weekly { display: block; }
+.wk .row2 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.wk input, .wk select { font: inherit; font-size: 14.5px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+.wk button { font: inherit; font-size: 14px; border-radius: 999px; padding: 6px 16px; cursor: pointer; border: 1px solid var(--teal); background: var(--teal); color: var(--surface); }
+.wk button.ghost { background: var(--surface); color: var(--teal); font-size: 12.5px; padding: 2px 10px; }
+.wk .tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-top: 20px; }
+.wk .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.wk .tile b { display: block; font-family: var(--display); font-size: 28px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.wk .tile span { font-size: 13px; color: var(--muted); }
+.wk .tile.lowt b { color: var(--low); }
+.wk h3 { font-family: var(--display); font-size: 18px; margin: 24px 0 8px; }
+.wk ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.wk .list { display: grid; gap: 8px; }
+.wk .list > div { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; overflow-wrap: anywhere; }
+.wk .list > div.low { border-left: 3px solid var(--low); }
+.wk .meta { font-size: 12.5px; color: var(--muted); }
+.wk table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.wk th, .wk td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.wk th { font-family: var(--mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 500; }
+.wk .scroll { overflow-x: auto; }
+@media (max-width: 760px) { .wk .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* Tell Prospector (web app only) */
 .tell { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 22px; }
@@ -227,6 +273,24 @@ footer p { margin: 0; }
 </style>
 
 <div class="wrap">
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Views" hidden>
+    <button type="button" role="tab" id="tab-radar" aria-selected="true">Radar</button>
+    <button type="button" role="tab" id="tab-weekly" aria-selected="false">Weekly summary</button>
+  </nav>
+  <section class="wk" id="weekly" aria-labelledby="wk-h">
+    <h2 id="wk-h">Your weekly Prospector summary</h2>
+    <p class="meta" style="font-size:14px;margin-top:6px">Every question you ask is saved automatically. This page shows your week: what you asked, the papers found and how confident the agent was, what to double-check, and the time saved.</p>
+    <div class="row2">
+      <label for="wk-user" class="eyebrow">Your name</label>
+      <input type="text" id="wk-user" maxlength="60" list="wk-users" placeholder="Name you ask with">
+      <datalist id="wk-users"></datalist>
+      <label for="wk-week" class="eyebrow">Week</label>
+      <select id="wk-week"></select>
+      <button type="button" id="wk-go">Show</button>
+      <span class="meta" id="wk-msg" aria-live="polite"></span>
+    </div>
+    <div id="wk-out"></div>
+  </section>
   <header>
     <div class="eyebrow">Agent 09 · Prospector Agent · <span id="month-name"></span> · papers to <span id="to-date"></span> <select id="month-pick" aria-label="Show another month" hidden></select></div>
     <h1><span class="n" id="h-feed">1,262</span> papers read this month. Ten worth our time. <span class="one">One</span> to pilot.</h1>
@@ -252,10 +316,12 @@ footer p { margin: 0; }
 
   <section class="ask" id="ask" aria-labelledby="ask-h" hidden>
     <h2 id="ask-h">Ask the agent</h2>
-    <p>Ask any question about your work. The agent searches our papers, the local AI checks if they really answer it, and if not it decides where to look next (older papers, or a live arXiv search with its own words) until it has enough. Every step is shown. Nothing is saved to the settings.</p>
+    <p>Ask any question about your work. The agent searches our papers, the local AI checks if they really answer it, and if not it decides where to look next (older papers, or a live arXiv search with its own words) until it has enough. Every step appears live as the agent takes it. It first checks your question, and at the end it checks every claim against the paper's own abstract and gives a confidence. Nothing is saved to the settings.</p>
     <div class="row2">
       <label for="ask-text" class="eyebrow" style="position:absolute;left:-9999px">Your question</label>
       <input type="text" id="ask-text" maxlength="500" placeholder="e.g. How do we stop hallucinations when LLMs write client reports?">
+      <label for="ask-user" class="eyebrow" style="position:absolute;left:-9999px">Your name</label>
+      <input type="text" id="ask-user" maxlength="60" placeholder="Your name (for your weekly summary)">
       <button type="button" id="ask-go">Ask</button>
       <span class="msg" id="ask-msg" aria-live="polite"></span>
     </div>
@@ -646,40 +712,155 @@ footer p { margin: 0; }
         b.addEventListener("click", () => { askT.value = t; askGo.click(); });
         document.getElementById("ask-tries").appendChild(b);
       });
+      const askU = document.getElementById("ask-user");
+      const QS = new URLSearchParams(location.search);   // ?user=Name prefills the name, ?ask=... runs a question
+      try { askU.value = QS.get("user") || localStorage.getItem("prospector-voter") || ""; } catch (_) { askU.value = QS.get("user") || ""; }
+      const ISSUE = { typo: "Spelling problem", vague: "Too vague", off_topic: "Probably outside research papers" };
+      const SUPPORTED = { yes: "supported by the abstract", partly: "partly supported by the abstract", no: "not supported by the abstract", "": "not checked" };
+      const stepHtml = s => `<li class="live"><span class="n">${s.n}</span><div>
+          <b>${esc(TOOLNAME[s.tool] || s.tool)}</b>${s.words ? ` for <span class="mono">"${esc(s.words)}"</span>` : ""}
+          <div class="t">Looked at ${fmt(s.looked_at)} papers, checked the closest ${s.checked}: <b>${s.relevant.length} useful</b> <span class="by ${s.by === "AI" ? "" : "rule"}">checked by ${esc(s.by)}</span></div>
+          ${s.thought ? `<div class="th">AI: "${esc(s.thought)}"</div>` : ""}
+          ${s.note ? `<div class="t">${esc(s.note)}</div>` : ""}
+          <div class="t">Next: ${esc(String(s.next || "stop").replace(/_/g, " "))} <span class="by ${s.next_by === "AI" ? "" : "rule"}">decided by ${esc(s.next_by || "rule")}</span></div>
+        </div></li>`;
+      const checkHtml = c => `<li class="live s0"><span class="n">0</span><div><b>Question check</b> <span class="by ${c.by === "AI" ? "" : "rule"}">${c.by === "AI" ? "checked by AI" : "checked by code"}</span>
+          ${c.reading ? `<div class="th">I read this as: "${esc(c.reading)}"</div>` : ""}
+          ${c.issue !== "none"
+            ? `<div class="t"><span class="flag">${esc(ISSUE[c.issue] || c.issue)}:</span> ${esc(c.note)} Searching for: <span class="mono">"${esc(c.search_text)}"</span></div>`
+            : (c.by === "AI" ? `<div class="t">No problem found in the question.</div>` : "")}
+          ${c.skipped ? `<div class="t">${esc(c.skipped)}</div>` : ""}
+        </div></li>`;
+      const paperHtml = (p, i, lowBelow) => {
+        const cc = p.claim_check || {}, prob = cc.problem && !cc.problem.startsWith("not checked") ? cc.problem.replace(/[.\s]+$/, "") : "";
+        return `<article class="${p.low_confidence ? "low" : ""}"><h3>${i + 1}. ${esc(p.title)}</h3>
+          <p class="t mono" style="color:var(--muted);font-size:12.5px">${esc(p.id)} · ${esc(p.published)} · closeness ${Number(p.similarity).toFixed(2)}${p.effort ? ` · effort ${esc(p.effort)}` : ""} · <span class="conf ${esc(p.confidence_label)}">confidence ${p.confidence}% · ${esc(p.confidence_label)}</span></p>
+          ${p.low_confidence ? `<p class="lowc">Low confidence (${p.confidence}%, below ${lowBelow}%)${prob ? ": " + esc(prob) : ""}. Read the paper before using this idea.</p>` : ""}
+          ${p.why ? `<p><span class="k">Why it fits</span>${esc(p.why)}</p>` : ""}
+          ${p.what ? `<p><span class="k">What it is</span>${esc(p.what)}</p>` : ""}
+          ${p.use_for_us ? `<p><span class="k">Use for us</span>${esc(p.use_for_us)}</p>` : ""}
+          <p class="cc"><span class="k">Claim check</span>${esc(SUPPORTED[cc.supported || ""] || cc.supported)}${prob && !p.low_confidence ? ` · ${esc(prob)}` : ""} · ${esc(p.confidence_why || "")}</p>
+          <p><a href="${esc(p.link)}" target="_blank" rel="noopener">Read the paper on arXiv</a></p></article>`;
+      };
       const askRun = async () => {
-        const q = askT.value.trim();
+        const q = askT.value.trim(), who = askU.value.trim();
         if (q.length < 3) { askM.textContent = "Type a question first."; return; }
-        askGo.disabled = true; askO.innerHTML = "";
+        try { if (who) localStorage.setItem("prospector-voter", who); } catch (_) {}
+        askGo.disabled = true;
+        askO.innerHTML = `<ol class="steps" id="ask-steps"></ol><div class="now" id="ask-now">Starting the agent…</div><div id="ask-end"></div>`;
+        const ol = document.getElementById("ask-steps"), now = document.getElementById("ask-now"), end = document.getElementById("ask-end");
         const t0 = Date.now(), tick = setInterval(() => { askM.textContent = `The agent is working… ${Math.round((Date.now() - t0) / 1000)} s`; }, 500);
         try {
-          const r = await fetch(`${API}/ask`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: q }) });
-          const d = await r.json();
-          if (!r.ok) throw new Error(d.detail || r.status);
-          const steps = d.steps.map(s => `<li><span class="n">${s.n}</span><div>
-              <b>${esc(TOOLNAME[s.tool] || s.tool)}</b>${s.words ? ` for <span class="mono">"${esc(s.words)}"</span>` : ""}
-              <div class="t">Looked at ${fmt(s.looked_at)} papers, checked the closest ${s.checked}: <b>${s.relevant.length} useful</b> <span class="by ${s.by === "AI" ? "" : "rule"}">checked by ${esc(s.by)}</span></div>
-              ${s.thought ? `<div class="th">AI: "${esc(s.thought)}"</div>` : ""}
-              ${s.note ? `<div class="t">${esc(s.note)}</div>` : ""}
-              <div class="t">Next: ${esc(String(s.next || "stop").replace(/_/g, " "))} <span class="by ${s.next_by === "AI" ? "" : "rule"}">decided by ${esc(s.next_by || "rule")}</span></div>
-            </div></li>`).join("");
-          const papers = d.papers.map((p, i) => `<article><h3>${i + 1}. ${esc(p.title)}</h3>
-              <p class="t mono" style="color:var(--muted);font-size:12.5px">${esc(p.id)} · ${esc(p.published)} · closeness ${Number(p.similarity).toFixed(2)}${p.effort ? ` · effort ${esc(p.effort)}` : ""}</p>
-              ${p.why ? `<p><span class="k">Why it fits</span>${esc(p.why)}</p>` : ""}
-              ${p.what ? `<p><span class="k">What it is</span>${esc(p.what)}</p>` : ""}
-              ${p.use_for_us ? `<p><span class="k">Use for us</span>${esc(p.use_for_us)}</p>` : ""}
-              <p><a href="${esc(p.link)}" target="_blank" rel="noopener">Read the paper on arXiv</a></p></article>`).join("");
-          askO.innerHTML = `<ol class="steps">${steps}</ol><p class="outcome">${esc(d.outcome)}</p><div class="ans">${papers}</div>
+          const r = await fetch(`${API}/ask/stream`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: q, user: who }) });
+          if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || r.status); }
+          let d = null, buf = "";
+          const handle = ev => {
+            if (ev.type === "status") now.textContent = ev.text;
+            else if (ev.type === "check") ol.insertAdjacentHTML("beforeend", checkHtml(ev.check));
+            else if (ev.type === "step") ol.insertAdjacentHTML("beforeend", stepHtml(ev.step));
+            else if (ev.type === "done") d = ev.result;
+            else if (ev.type === "error") throw new Error(ev.detail);
+          };
+          const reader = r.body.getReader(), dec = new TextDecoder();
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (value) {
+              buf += dec.decode(value, { stream: true });
+              let i;
+              while ((i = buf.indexOf("\n")) >= 0) { const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (line) handle(JSON.parse(line)); }
+            }
+            if (done) break;
+          }
+          if (buf.trim()) handle(JSON.parse(buf));
+          if (!d) throw new Error("the run ended early");
+          now.remove();
+          const low = d.papers.filter(p => p.low_confidence).length;
+          end.innerHTML = `<p class="outcome">${esc(d.outcome)}</p>
+            ${d.papers.length ? `<p class="t" style="font-size:13.5px;color:var(--muted)">Papers are sorted by confidence. Confidence = how close the paper is to your question (40%) + whether its abstract supports what the agent says (60%), by a fixed rule.${low ? ` <span class="lowc">Below ${d.low_confidence_below}% is low confidence.</span>` : ""}</p>` : ""}
+            <div class="ans">${d.papers.map((p, i) => paperHtml(p, i, d.low_confidence_below)).join("")}</div>
             <div class="row2" style="margin-top:12px"><button type="button" class="ghost" id="ask-keep">Follow this topic every month</button></div>`;
           document.getElementById("ask-keep").addEventListener("click", () => {
             const tt = document.getElementById("tell-text"); tt.value = `My interest is: ${q}`;
             document.getElementById("tell").scrollIntoView({ behavior: "smooth" }); tt.focus();
           });
-          askM.textContent = `Done in ${d.seconds} s · AI: ${d.ai}`;
-        } catch (e) { askM.textContent = "The agent could not answer: " + e.message; }
+          askM.textContent = `Done in ${d.seconds} s · AI: ${d.ai}` + (who ? ` · saved to ${who}'s weekly summary` : " · type your name to keep this in a weekly summary");
+        } catch (e) {
+          askM.textContent = "The agent could not answer: " + e.message;
+          const n = document.getElementById("ask-now"); if (n) n.remove();
+        }
         finally { clearInterval(tick); askGo.disabled = false; }
       };
       askGo.addEventListener("click", askRun);
       askT.addEventListener("keydown", e => { if (e.key === "Enter") askRun(); });
+
+      // Tabs: Radar | Weekly summary (each person's week, from data/users.json)
+      const tabs = document.getElementById("tabs"), tR = document.getElementById("tab-radar"), tW = document.getElementById("tab-weekly");
+      const wkU = document.getElementById("wk-user"), wkW = document.getElementById("wk-week"), wkGo = document.getElementById("wk-go");
+      const wkM = document.getElementById("wk-msg"), wkO = document.getElementById("wk-out");
+      tabs.hidden = false;
+      const enc = encodeURIComponent;
+      const confChip = p => `<span class="conf ${esc(p.label)}">${p.confidence}% · ${esc(p.label)}</span>`;
+      const renderWeek = d => {
+        const t = d.totals;
+        const tile = (n, label, cls) => `<div class="tile ${cls || ""}"><b>${n}</b><span>${label}</span></div>`;
+        const list = (items, f) => items.length ? `<div class="list">${items.map(f).join("")}</div>` : `<p class="meta">None.</p>`;
+        wkO.innerHTML = `<div class="tiles">
+            ${tile(t.questions, "questions asked")}${tile(t.answered, "answered with papers")}${tile(t.papers, "papers found")}
+            ${tile(t.low, "low-confidence papers", t.low ? "lowt" : "")}${tile(t.minutes_saved, "minutes saved (estimate)")}
+          </div>
+          <h3>This week in short</h3><ul>${d.highlights.map(h => `<li>${esc(h)}</li>`).join("")}</ul>
+          <h3>Best papers this week</h3>
+          ${list(d.papers, p => `<div class="${p.low ? "low" : ""}"><a href="${esc(p.link)}" target="_blank" rel="noopener">${esc(p.title)}</a> ${confChip(p)}<div class="meta">${esc(p.id)} · for: "${esc(p.question)}"</div></div>`)}
+          ${d.low.length ? `<h3 class="lowc">Double-check these (low confidence)</h3>${list(d.low, p => `<div class="low"><a href="${esc(p.link)}" target="_blank" rel="noopener">${esc(p.title)}</a> ${confChip(p)}<div class="meta lowc">The abstract does not fully support what the agent said. Read the paper before using the idea.</div></div>`)}` : ""}
+          <h3>Not answered yet</h3>
+          ${list(d.unanswered, a => `<div>${esc(a.question)} <button type="button" class="ghost" data-again="${esc(a.question)}">Ask again</button><div class="meta">${esc(a.when)} · no paper really answered it; nothing was made up</div></div>`)}
+          ${d.corrected.length ? `<h3>Questions the agent corrected</h3>${list(d.corrected, a => `<div>${esc(a.question)}<div class="meta"><span class="flag">${esc(ISSUE[a.issue] || a.issue)}</span>: ${esc(a.note)} Searched as "${esc(a.searched_as)}"</div></div>`)}` : ""}
+          <h3>All questions</h3>
+          ${d.questions.length ? `<div class="scroll"><table><thead><tr><th>When</th><th>Question</th><th>Papers</th><th>Seconds</th></tr></thead><tbody>
+            ${d.questions.map(a => `<tr><td class="mono">${esc(a.when)}</td><td>${esc(a.question)}</td><td class="mono">${a.papers}</td><td class="mono">${a.seconds}</td></tr>`).join("")}</tbody></table></div>` : `<p class="meta">None.</p>`}
+          <p class="meta" style="margin-top:18px">Votes this week: ${t.votes}. Team this week: ${d.team.people} ${d.team.people === 1 ? "person" : "people"} asked ${d.team.questions} question${d.team.questions === 1 ? "" : "s"}.
+            Time saved assumes ${t.manual_minutes_assumed} minutes per manual search, minus the ${t.agent_minutes} minutes the agent took.</p>`;
+      };
+      const loadWeek = async week => {
+        const who = wkU.value.trim();
+        if (!who) { wkM.textContent = "Type the name you ask with."; wkO.innerHTML = ""; return; }
+        wkM.textContent = "Loading…"; wkGo.disabled = true;
+        try {
+          const r = await fetch(`${API}/summary?user=${enc(who)}${week ? `&week=${enc(week)}` : ""}`);
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.detail || r.status);
+          wkW.innerHTML = d.weeks.map(w => `<option value="${esc(w)}"${w === d.week ? " selected" : ""}>${esc(w)}</option>`).join("");
+          renderWeek(d);
+          wkM.textContent = `${d.user} · ${d.from} to ${d.to}`;
+          try { localStorage.setItem("prospector-voter", who); } catch (_) {}
+        } catch (e) { wkM.textContent = "Summary not available: " + e.message; }
+        finally { wkGo.disabled = false; }
+      };
+      const showTab = weekly => {
+        document.body.classList.toggle("tab-weekly", weekly);
+        tR.setAttribute("aria-selected", String(!weekly)); tW.setAttribute("aria-selected", String(weekly));
+        try { history.replaceState(null, "", location.pathname + location.search + (weekly ? "#weekly" : "")); } catch (_) {}
+        window.scrollTo(0, 0);
+        if (weekly) {
+          if (!wkU.value) wkU.value = askU.value || "";
+          fetch(`${API}/summary/users`).then(r => r.json()).then(u => {
+            document.getElementById("wk-users").innerHTML = (u.users || []).map(n => `<option value="${esc(n)}">`).join("");
+          }).catch(() => {});
+          loadWeek();
+        }
+      };
+      tR.addEventListener("click", () => showTab(false));
+      tW.addEventListener("click", () => showTab(true));
+      wkGo.addEventListener("click", () => loadWeek(wkW.value));
+      wkW.addEventListener("change", () => loadWeek(wkW.value));
+      wkU.addEventListener("keydown", e => { if (e.key === "Enter") loadWeek(); });
+      wkO.addEventListener("click", e => {
+        const b = e.target.closest("[data-again]"); if (!b) return;
+        showTab(false); askT.value = b.dataset.again;
+        document.getElementById("ask").scrollIntoView({ behavior: "smooth" }); askT.focus();
+      });
+      if (location.hash === "#weekly") showTab(true);
+      else if (QS.get("ask")) { askT.value = QS.get("ask").slice(0, 500); askRun(); }
 
       // Tell Prospector: preview what the local AI understood, then add on a second click
       const tell = document.getElementById("tell"), txt = document.getElementById("tell-text");
